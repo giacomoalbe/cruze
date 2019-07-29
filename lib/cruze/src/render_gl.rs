@@ -1,21 +1,19 @@
 use gl;
-use canvas;
+use super::canvas;
 
 use std;
 use std::ffi::{CString, CStr};
 
 pub struct Renderer {
     gl: gl::Gl,
-    vertices: Vec<f64>,
+    vertices: Vec<f32>,
     indices: Vec<u32>,
     program: Program,
+    vao: gl::types::GLuint,
 }
 
 impl Renderer {
-    pub fn new(gl: gl::Gl) -> Renderer {
-        let (vertices, indices) =
-            canvas::rectangle(0.5, 0.5 * ((4/3) as f32), 0.5);
-
+    pub fn new(gl: &gl::Gl) -> Renderer {
         let vert_shader = Shader::from_vert_source(
             &gl,
             &CString::new(include_str!("triangle.vert")).unwrap()
@@ -34,18 +32,110 @@ impl Renderer {
             .unwrap();
 
         Renderer {
-            gl: gl,
-            vertices: vertices,
-            indices: indices,
-            program: program
+            gl: gl.clone(),
+            vertices: vec![],
+            indices: vec![],
+            program: program,
+            vao: 0,
         }
     }
 
-    fn generate_geometry(&self) -> (Vec<f32>, Vec<u32>) {
+    pub fn generate_geometry(&mut self) {
         // The geometry has to be generated from
         // the Widget Tree
-        println!("Generating geometry");
-        (Vec::new(), Vec::new())
+
+        let (vertices, indices) =
+            canvas::rectangle(0.5, 0.3, 0.1);
+
+        self.vertices = vertices;
+        self.indices = indices;
+
+        self.bind_vertex_arrays();
+    }
+
+    fn bind_vertex_arrays(&mut self) {
+        let (vao, vbo, ebo) = unsafe {
+            let gl = self.gl.clone();
+
+            let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
+
+            gl.GenVertexArrays(1, &mut vao);
+            gl.GenBuffers(1, &mut vbo);
+            gl.GenBuffers(1, &mut ebo);
+            gl.BindVertexArray(vao);
+
+            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl.BufferData(
+                gl::ARRAY_BUFFER,
+                (self.vertices.len() * std::mem::size_of::<gl::types::GLuint>()) as gl::types::GLsizeiptr,
+                self.vertices.as_ptr() as *const gl::types::GLvoid,
+                gl::STATIC_DRAW
+            );
+
+            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            gl.BufferData(
+                gl::ELEMENT_ARRAY_BUFFER,
+                (self.indices.len() * std::mem::size_of::<gl::types::GLfloat>()) as gl::types::GLsizeiptr,
+                self.indices.as_ptr() as *const gl::types::GLvoid,
+                gl::STATIC_DRAW
+            );
+
+            // Enable location "Position (0)" in Vertex Shader
+            gl.EnableVertexAttribArray(0);
+            gl.VertexAttribPointer(
+                0,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                std::ptr::null()
+            );
+
+            // Enable location "Color(1)" in Vertex Shader
+            gl.EnableVertexAttribArray(1);
+            gl.VertexAttribPointer(
+                1,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                (3 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            );
+
+            // Unbind both VBO and VAO
+            gl.BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl.BindVertexArray(0);
+
+            (vao, vbo, ebo)
+        };
+
+        self.vao = vao;
+    }
+
+    pub fn draw(&self) {
+        unsafe {
+            let gl = self.gl.clone();
+
+            gl.ClearColor(0.3, 0.3, 0.5, 0.1);
+            gl.Clear(gl::COLOR_BUFFER_BIT);
+
+            self.program.set_used();
+
+            gl.BindVertexArray(self.vao);
+
+            gl.DrawElements(
+                gl::TRIANGLES,
+                self.indices.len() as i32,
+                gl::UNSIGNED_INT,
+                std::ptr::null()
+            );
+        }
+    }
+
+    pub fn resize(&self, size: glutin::dpi::LogicalSize) {
+        unsafe {
+            self.gl.Viewport(0, 0, size.width as i32, size.height as i32);
+        }
     }
 }
 
