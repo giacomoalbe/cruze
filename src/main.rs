@@ -1,12 +1,27 @@
-extern crate sdl2;
-extern crate gl;
+extern crate cruze;
 
+use cruze::{Window, main_loop};
+
+/*
 mod render_gl;
 mod canvas;
 
 use std;
 use std::ffi::{CString, CStr};
+*/
 
+fn main() {
+    let width: u32 = 800;
+    let height: u32 = 600;
+
+    let window = cruze::Window::new(width, height);
+
+    window.show();
+
+    cruze::main_loop();
+}
+
+/*
 fn main() {
     let width: i32 = 800;
     let height: i32 = 800;
@@ -130,6 +145,31 @@ fn main() {
 
     let mut event_pump = sdl.event_pump().unwrap();
 
+    unsafe {
+        gl.Clear(gl::COLOR_BUFFER_BIT);
+        shader_program.set_used();
+        gl.BindVertexArray(vao);
+
+        /*
+           gl.DrawArrays(
+           gl::TRIANGLES, // mode
+           0,             // triangle offset of start vertex
+           3              // number of vertices to be rendered
+           );
+           */
+        gl.DrawElements(
+            gl::TRIANGLES,
+            indices.len() as i32,
+            gl::UNSIGNED_INT,
+            std::ptr::null()
+        );
+    }
+
+    let canvas = canvas::Canvas::new();
+
+    // Render window contents here
+    window.gl_swap_window();
+
     'main: loop {
         for event in event_pump.poll_iter() {
             // Handle user input here
@@ -139,28 +179,7 @@ fn main() {
             }
         }
 
-        unsafe {
-            gl.Clear(gl::COLOR_BUFFER_BIT);
-            shader_program.set_used();
-            gl.BindVertexArray(vao);
-
-            /*
-               gl.DrawArrays(
-               gl::TRIANGLES, // mode
-               0,             // triangle offset of start vertex
-               3              // number of vertices to be rendered
-               );
-               */
-            gl.DrawElements(
-                gl::TRIANGLES,
-                indices.len() as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null()
-            );
-        }
-
-        // Render window contents here
-        window.gl_swap_window();
-
+        canvas.draw();
     }
 }
+*/
