@@ -13,7 +13,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(gl: gl::Gl) -> Renderer {
-        let (vertices, indices) =
+        let (vertices, indices) = (vec![], vec![]);
             canvas::rectangle(0.5, 0.5 * ((4/3) as f32), 0.5);
 
         let vert_shader = Shader::from_vert_source(

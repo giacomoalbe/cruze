@@ -45,7 +45,19 @@ impl Renderer {
         // the Widget Tree
 
         let (vertices, indices) =
-            canvas::rectangle(0.5, 0.3, 0.1);
+            //canvas::rectangle(0.5, 0.3, 0.1);
+        (
+            vec![
+                -0.8,  0.8, 1.0, 1.0, 0.0, 0.0,
+                 0.8,  0.8, 1.0, 1.0, 0.0, 0.0,
+                 0.8, -0.8, 1.0, 1.0, 0.0, 0.0,
+                -0.8, -0.8, 1.0, 1.0, 0.0, 0.0,
+            ],
+            vec![
+                0, 1, 2,
+                0, 2, 3
+            ]
+        );
 
         self.vertices = vertices;
         self.indices = indices;

@@ -40,16 +40,16 @@ impl App {
 
                     match window {
                         Some(window) => match event {
-                                WindowEvent::Resized(logical_size) => {
-                                    window.resize(logical_size);
-                                },
-                                WindowEvent::RedrawRequested => {
-                                    window.draw();
-                                },
-                                WindowEvent::CloseRequested => {
-                                    *control_flow = ControlFlow::Exit
-                                },
-                                _ => (),
+                            WindowEvent::Resized(logical_size) => {
+                                window.resize(logical_size);
+                            },
+                            WindowEvent::RedrawRequested => {
+                                window.draw();
+                            },
+                            WindowEvent::CloseRequested => {
+                                *control_flow = ControlFlow::Exit
+                            },
+                            _ => (),
                         },
                         _ => {
                             println!("{:?}", event);
