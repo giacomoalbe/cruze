@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 cgmath = "0.17.0"
-lyon = "0.14.0"
+lyon = { path = "../../../lyon" }
 gl = { path = "../gl" }
 glutin = "0.22.0-alpha1"
 

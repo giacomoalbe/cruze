@@ -4,11 +4,19 @@ use super::canvas;
 use std;
 use std::ffi::{CString, CStr};
 
+use cgmath::{Matrix, Matrix4, Vector4};
+use cgmath::prelude::*;
+
+use glutin::event::VirtualKeyCode;
+
 pub struct Renderer {
     gl: gl::Gl,
     vertices: Vec<f32>,
     indices: Vec<u32>,
+    primitives: Vec<canvas::Primitive>,
     program: Program,
+    projection: Matrix4<f32>,
+    model: Matrix4<f32>,
     vao: gl::types::GLuint,
 }
 
@@ -31,42 +39,51 @@ impl Renderer {
             )
             .unwrap();
 
-        Renderer {
+        let mut renderer = Renderer {
+            projection: Matrix4::identity(),
+            model: Matrix4::identity(),
             gl: gl.clone(),
             vertices: vec![],
             indices: vec![],
+            primitives: vec![],
             program: program,
             vao: 0,
-        }
+        };
+
+        renderer.bind_vertex_arrays();
+
+        renderer
     }
 
-    pub fn generate_geometry(&mut self) {
+    fn generate_geometry() -> canvas::Rectangle {
         // The geometry has to be generated from
         // the Widget Tree
 
-        let (vertices, indices) =
-            //canvas::rectangle(0.5, 0.3, 0.1);
-        (
-            vec![
-                -0.8,  0.8, 1.0, 1.0, 0.0, 0.0,
-                 0.8,  0.8, 1.0, 1.0, 0.0, 0.0,
-                 0.8, -0.8, 1.0, 1.0, 0.0, 0.0,
-                -0.8, -0.8, 1.0, 1.0, 0.0, 0.0,
-            ],
-            vec![
-                0, 1, 2,
-                0, 2, 3
-            ]
+        let mut rectangle = canvas::Rectangle::new(
+            canvas::Point2::new(0.0, 0.0),
+            canvas::Size::new(200.0, 200.0),
+            5.0
         );
 
-        self.vertices = vertices;
-        self.indices = indices;
+        rectangle.translate(cgmath::Vector2::new(0.0, 0.0));
+        rectangle.rotate(30.0);
+        rectangle.scale(1.7);
 
-        self.bind_vertex_arrays();
+        rectangle
+    }
+
+    fn generate_geometry_primitives(&mut self) {
+        let (vertices, indices, primitives) = canvas::generate_mesh();
+
+        self.indices = indices;
+        self.vertices = vertices;
+        self.primitives = primitives;
     }
 
     fn bind_vertex_arrays(&mut self) {
-        let (vao, vbo, ebo) = unsafe {
+        self.generate_geometry_primitives();
+
+        self.vao = unsafe {
             let gl = self.gl.clone();
 
             let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
@@ -99,10 +116,11 @@ impl Renderer {
                 3,
                 gl::FLOAT,
                 gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                (3 * std::mem::size_of::<f32>()) as gl::types::GLint,
                 std::ptr::null()
             );
 
+            /*
             // Enable location "Color(1)" in Vertex Shader
             gl.EnableVertexAttribArray(1);
             gl.VertexAttribPointer(
@@ -113,18 +131,17 @@ impl Renderer {
                 (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
                 (3 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
             );
+            */
 
             // Unbind both VBO and VAO
             gl.BindBuffer(gl::ARRAY_BUFFER, 0);
             gl.BindVertexArray(0);
 
-            (vao, vbo, ebo)
+            vao
         };
-
-        self.vao = vao;
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
         unsafe {
             let gl = self.gl.clone();
 
@@ -133,22 +150,109 @@ impl Renderer {
 
             self.program.set_used();
 
+            self.program.set_mat4(
+                CStr::from_bytes_with_nul_unchecked(b"projection\0"),
+                &self.projection
+            );
+
+            self.program.set_mat4(
+                CStr::from_bytes_with_nul_unchecked(b"model\0"),
+                &self.model
+            );
+
             gl.BindVertexArray(self.vao);
 
-            gl.DrawElements(
-                gl::TRIANGLES,
-                self.indices.len() as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null()
+            canvas::draw_primitives(
+                gl,
+                &mut self.program,
+                &self.primitives
             );
         }
     }
 
-    pub fn resize(&self, size: glutin::dpi::LogicalSize) {
+    pub fn resize(&mut self, size: glutin::dpi::LogicalSize) {
         unsafe {
+            self.projection = cgmath::ortho(
+                0.0,
+                size.width as f32,
+                0.0,
+                size.height as f32,
+                -1.0,
+                1.0
+            );
+
+            /*
+            self.rectangle.translate(
+                cgmath::Vector2::new(
+                    size.width as f32 / 2.0,
+                    size.height as f32 / 2.0
+                )
+            );
+
+            self.model = self.rectangle.model();
+            */
+
             self.gl.Viewport(0, 0, size.width as i32, size.height as i32);
         }
     }
+
+    /*
+    pub fn send_key(&mut self, key: VirtualKeyCode) {
+        match key {
+            VirtualKeyCode::R => {
+                let current_rotation = self.rectangle.current_rotation + 15.0;
+
+                self.rectangle.rotate(current_rotation);
+            },
+            VirtualKeyCode::D => {
+                let current_rotation = self.rectangle.current_rotation - 15.0;
+
+                self.rectangle.rotate(current_rotation);
+            },
+            VirtualKeyCode::Left => {
+                let mut current_translate = self.rectangle.current_translate;
+
+                current_translate.x -= 10.0;
+
+                self.rectangle.translate(current_translate);
+            },
+            VirtualKeyCode::Right => {
+                let mut current_translate = self.rectangle.current_translate;
+
+                current_translate.x += 10.0;
+
+                self.rectangle.translate(current_translate);
+            },
+            VirtualKeyCode::Up => {
+                let mut current_translate = self.rectangle.current_translate;
+
+                current_translate.y += 10.0;
+
+                self.rectangle.translate(current_translate);
+            },
+            VirtualKeyCode::Down => {
+                let mut current_translate = self.rectangle.current_translate;
+
+                current_translate.y -= 10.0;
+
+                self.rectangle.translate(current_translate);
+            },
+            VirtualKeyCode::S => {
+                let current_scale = self.rectangle.current_scale + 0.1;
+
+                self.rectangle.scale(current_scale);
+            },
+            VirtualKeyCode::X => {
+                let current_scale = self.rectangle.current_scale - 0.1;
+
+                self.rectangle.scale(current_scale);
+            },
+            _ => ()
+        };
+
+        self.model = self.rectangle.model()
+    }
+    */
 }
 
 pub struct Program {
@@ -217,6 +321,26 @@ impl Program {
         unsafe {
             self.gl.UseProgram(self.id);
         }
+    }
+
+    pub unsafe fn set_mat4(&self, name: &CStr, mat: &Matrix4<f32>) {
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+
+        self.gl.UniformMatrix4fv(uniform_location, 1, gl::FALSE, mat.as_ptr());
+    }
+
+    pub unsafe fn set_vec3(&self, name: &CStr, mat: &cgmath::Vector3<f32>) {
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+
+        self.gl.Uniform3fv(uniform_location, 1, mat.as_ptr());
+    }
+
+    pub unsafe fn set_color(&self, name: &CStr, color: &canvas::Color) {
+        let uniform_location = self.gl.GetUniformLocation(
+            self.id,
+            name.as_ptr());
+
+        self.gl.Uniform3fv(uniform_location, 1, color.to_vec3().as_ptr());
     }
 }
 

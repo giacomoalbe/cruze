@@ -3,6 +3,7 @@ use super::render_gl;
 use super::canvas;
 
 use glutin::window::{WindowBuilder, WindowId};
+use glutin::event::VirtualKeyCode;
 use glutin::{
     ContextBuilder,
     ContextWrapper,
@@ -50,7 +51,10 @@ impl Window {
 
         let mut renderer = render_gl::Renderer::new(&gl);
 
-        renderer.generate_geometry();
+        renderer.resize(glutin::dpi::LogicalSize {
+            width: width as f64,
+            height: height as f64
+        });
 
         Window {
             renderer: renderer,
@@ -63,14 +67,32 @@ impl Window {
         }
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
         self.renderer.draw();
+
         self.context
             .swap_buffers()
             .unwrap();
     }
 
-    pub fn resize(&self, size: glutin::dpi::LogicalSize) {
+    pub fn resize(&mut self, size: glutin::dpi::LogicalSize) {
         self.renderer.resize(size);
+    }
+
+    pub fn send_key(&mut self, key: VirtualKeyCode) {
+        match key {
+                VirtualKeyCode::Left |
+                VirtualKeyCode::Right |
+                VirtualKeyCode::Up |
+                VirtualKeyCode::Down |
+                VirtualKeyCode::R |
+                VirtualKeyCode::D |
+                VirtualKeyCode::S |
+                VirtualKeyCode::X
+             => (),//self.renderer.send_key(key),
+            _ => println!("Do nothing")
+        };
+
+        self.draw();
     }
 }

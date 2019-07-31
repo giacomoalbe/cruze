@@ -1,9 +1,18 @@
 use super::window;
 
 use std::collections::HashMap;
+use std::borrow::BorrowMut;
 
 use glutin::window::WindowId;
-use glutin::event::{Event, WindowEvent};
+
+use glutin::event::{
+    Event,
+    WindowEvent,
+    KeyboardInput,
+    VirtualKeyCode,
+    ElementState::Pressed
+};
+
 use glutin::event_loop::ControlFlow;
 
 pub struct App {
@@ -23,9 +32,9 @@ impl App {
     }
 
     pub fn run(self) {
-        let windows = self.windows;
+        let mut windows = self.windows;
 
-        for (id, window) in windows.iter() {
+        for (id, window) in windows.iter_mut() {
             // Set only if window is visible
             window.draw();
         }
@@ -35,28 +44,52 @@ impl App {
 
             match event {
                 Event::LoopDestroyed => return,
-                Event::WindowEvent { event, window_id } => {
-                    let window = windows.get(&window_id);
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput {
+                        input: KeyboardInput {
+                            state: Pressed,
+                            virtual_keycode: Some(key),
+                            ..
+                        }, ..
+                    },
+                    window_id
+                } => {
+                    let window = windows
+                        .get_mut(&window_id);
 
                     match window {
-                        Some(window) => match event {
-                            WindowEvent::Resized(logical_size) => {
-                                window.resize(logical_size);
-                            },
-                            WindowEvent::RedrawRequested => {
-                                window.draw();
-                            },
-                            WindowEvent::CloseRequested => {
-                                *control_flow = ControlFlow::Exit
-                            },
-                            _ => (),
+                        Some(window) => {
+                            window.send_key(key);
                         },
-                        _ => {
-                            println!("{:?}", event);
-                            println!("Something went wrong...")
+                        None => {
+                            println!("Qualcosa è andato storto");
                         }
                     };
-                }
+                },
+                Event::WindowEvent { event, window_id } => {
+                    let window = windows
+                        .get_mut(&window_id);
+
+                    match window {
+                        Some(window) => {
+                            match event {
+                                WindowEvent::Resized(logical_size) => {
+                                    window.resize(logical_size);
+                                },
+                                WindowEvent::RedrawRequested => {
+                                    window.draw();
+                                },
+                                WindowEvent::CloseRequested => {
+                                    *control_flow = ControlFlow::Exit
+                                },
+                                _ => (),
+                            };
+                        },
+                        None => {
+                            println!("Qualcosa è andato storto :(");
+                        }
+                    }
+                },
                 _ => (),
             }
         });
