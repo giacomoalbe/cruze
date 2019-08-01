@@ -226,18 +226,55 @@ impl Rectangle {
 }
 */
 
+#[derive(Debug)]
+pub struct Gradient {
+    pub start_pos: Vector,
+    pub end_pos: Vector,
+    pub first_color: Color,
+    pub last_color: Color
+}
+
+impl Gradient {
+    pub fn new() -> Gradient {
+        Gradient {
+            start_pos: vector(0.5, 0.0),
+            end_pos: vector(0.5, 1.0),
+            first_color: color(0.0, 0.0, 0.0),
+            last_color: color(0.0, 0.0, 0.0),
+        }
+    }
+
+    pub fn from_values(
+        start_pos: Vector,
+        end_pos: Vector,
+        first_color: Color,
+        last_color: Color)
+    -> Gradient
+    {
+        Gradient {
+            start_pos,
+            end_pos,
+            first_color,
+            last_color
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Primitive {
-    color: Color,
+    gradient: Gradient,
     num_vertices: u32,
     stroke_width: f32,
+    bbox: cgmath::Vector4<f32>,
 }
 
 impl Primitive {
     pub fn new() -> Primitive {
         Primitive {
-            color: Color::new(1.0, 0.0, 0.0),
+            gradient: Gradient::new(),
             stroke_width: 0.0,
-            num_vertices: 0
+            num_vertices: 0,
+            bbox: cgmath::Vector4::new(0.0, 0.0, 0.0, 0.0),
         }
     }
 }
@@ -273,7 +310,7 @@ impl VertexConstructor<StrokeVertex, CtxVertex> for CtxVertex {
 enum CtxCommand {
     MoveTo(Point),
     LineTo(Point),
-    Color(Color),
+    Gradient(CtxDirection, Color, Color),
     StrokeWidth(f32),
     Arc(Point, Vector, Angle, Angle),
     Close,
@@ -349,8 +386,26 @@ impl Ctx {
             match command {
                 CtxCommand::LineTo(p) => builder.line_to(*p),
                 CtxCommand::MoveTo(p) => builder.move_to(*p),
-                CtxCommand::Color(c) => {
-                    current_primitive.color = c.clone();
+                CtxCommand::Gradient(gradient_type, f_c, l_c) => {
+                    match gradient_type {
+                        CtxDirection::GradientY => {
+                            current_primitive.gradient = Gradient {
+                                start_pos: vector(0.5, 0.0),
+                                end_pos: vector(0.5, 1.0),
+                                first_color: *f_c,
+                                last_color: *l_c
+                            };
+                        },
+                        CtxDirection::GradientX => {
+                            current_primitive.gradient = Gradient {
+                                start_pos: vector(1.0, 0.5),
+                                end_pos: vector(0.0, 0.5),
+                                first_color: *f_c,
+                                last_color: *l_c
+                            };
+                        },
+                        _ => ()
+                    }
                 },
                 CtxCommand::StrokeWidth(w) => {
                     current_primitive.stroke_width = *w;
@@ -363,6 +418,18 @@ impl Ctx {
         }
 
         let path = builder.build();
+
+        let bbox =  lyon::algorithms::aabb::fast_bounding_rect(path.iter());
+
+        // BBox is TOP, RIGHT, BOTTOM, LEFT coordinates
+        // of the current path bounding box, calculated from
+        // the center using width and height
+        current_primitive.bbox = cgmath::Vector4::new(
+            bbox.center().y + bbox.size.height / 2.0,
+            bbox.center().x + bbox.size.width / 2.0,
+            bbox.center().y - bbox.size.height / 2.0,
+            bbox.center().x - bbox.size.width / 2.0,
+        );
 
         (path, current_primitive)
     }
@@ -458,8 +525,6 @@ impl Ctx {
 
         let radius = radius.min(min_w_h / 2.0);
 
-        println!("True radius: {}", radius);
-
         let radii: Vector = vector(radius, radius);
 
         let c_left = center.x - width / 2.0 + radius;
@@ -520,49 +585,28 @@ impl Ctx {
         self.close();
     }
 
-    fn wind_rect(&mut self, center: Point, width: f32, height: f32, inset: f32) {
-        let l = center.x - width / 2.0;
-        let r = center.x + width / 2.0;
-        let b = center.y - height / 2.0;
-        let t = center.y + height / 2.0;
-
-        let l_i = l + inset;
-        let r_i = r - inset;
-        let t_i = t - inset;
-        let b_i = b + inset;
-
-        let tl = point(l, t);
-        let tr = point(r, t);
-        let bl = point(l, b);
-        let br = point(r, b);
-
-        let tl_i: Point = point(l_i, t_i);
-        let tr_i: Point = point(r_i, t_i);
-        let bl_i: Point = point(l_i, b_i);
-        let br_i: Point = point(r_i, b_i);
-
-        self.move_to(tl);
-        self.line_to(tr);
-        self.line_to(br);
-        self.line_to(bl);
-        self.line_to(tl);
-
-        self.close();
-
-        self.move_to(tl_i);
-        self.line_to(tr_i);
-        self.line_to(br_i);
-        self.line_to(bl_i);
-
-        self.close();
-    }
-
     fn set_direction(&mut self, direction: CtxDirection) {
         self.path_direction = direction;
     }
 
     fn color(&mut self, c: Color) {
-        self.commands.push(CtxCommand::Color(c));
+        self.gradient_y(c, c);
+    }
+
+    fn gradient_y(&mut self, first_color: Color, last_color: Color) {
+        self.commands.push(CtxCommand::Gradient(
+                CtxDirection::GradientY,
+                first_color,
+                last_color
+        ));
+    }
+
+    fn gradient_x(&mut self, first_color: Color, last_color: Color) {
+        self.commands.push(CtxCommand::Gradient(
+                CtxDirection::GradientX,
+                first_color,
+                last_color
+        ));
     }
 
     fn stroke_width(&mut self, width: f32) {
@@ -600,26 +644,6 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
 
     /*
     ctx.begin_primitive();
-    ctx.move_to(point(100.0, 100.0));
-    ctx.line_to(point(100.0, 200.0));
-    ctx.line_to(point(200.0, 200.0));
-    ctx.line_to(point(200.0, 100.0));
-    ctx.color(color(0.5, 0.1, 1.0));
-    ctx.close();
-
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.move_to(point(400.0, 400.0));
-    ctx.line_to(point(400.0, 500.0));
-    ctx.line_to(point(500.0, 500.0));
-    ctx.line_to(point(500.0, 400.0));
-    ctx.color(color(0.1, 0.8, 0.2));
-    ctx.close();
-    ctx.fill();
-    */
-
-    ctx.begin_primitive();
     ctx.rect(point(300.0, 300.0), 200.0, 60.0);
     ctx.color(color(1.0, 0.0, 0.0));
     ctx.fill();
@@ -651,7 +675,7 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
 
     ctx.begin_primitive();
     ctx.circle(point(500.0, 200.0), 80.0);
-    ctx.color(color(0.0, 0.5, 0.8));
+    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
     ctx.fill();
 
     ctx.begin_primitive();
@@ -670,11 +694,23 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     ctx.stroke_width(3.0);
     ctx.stroke();
 
-
     ctx.begin_primitive();
     ctx.round_rect(point(400.0, 500.0), 100.0, 80.0, 10.0);
     ctx.rect(point(400.0, 500.0), 80.0, 60.0);
-    ctx.color(color(0.0, 0.5, 1.0));
+    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 1.0, 0.0));
+    ctx.fill();
+    */
+
+    ctx.begin_primitive();
+    ctx.circle(point(300.0, 200.0), 50.0);
+    ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
+    ctx.fill();
+
+    ctx.begin_primitive();
+    ctx.circle(point(500.0, 200.0), 50.0);
+    ctx.circle(point(500.0, 200.0), 40.0);
+    ctx.gradient_x(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
     ctx.fill();
 
     ctx.end_mesh()
@@ -687,10 +723,8 @@ pub fn draw_primitives(gl: gl::Gl, program: &mut Program, primitives: &Vec<Primi
 
     for primitive in primitives {
         unsafe {
-            program.set_color(
-                CStr::from_bytes_with_nul_unchecked(b"color\0"),
-                &primitive.color
-            );
+            program.set_vec4("bbox", &primitive.bbox);
+            program.set_gradient(&primitive.gradient);
 
             gl.DrawElements(
                 gl::TRIANGLES,
@@ -704,5 +738,5 @@ pub fn draw_primitives(gl: gl::Gl, program: &mut Program, primitives: &Vec<Primi
         tris_offset += primitive.num_vertices as usize;
     }
 
-    println!("Frame render: {}", start_time.elapsed().as_micros());
+    //println!("Frame render: {}", start_time.elapsed().as_micros());
 }

@@ -152,15 +152,8 @@ impl Renderer {
 
             self.program.set_used();
 
-            self.program.set_mat4(
-                CStr::from_bytes_with_nul_unchecked(b"projection\0"),
-                &self.projection
-            );
-
-            self.program.set_mat4(
-                CStr::from_bytes_with_nul_unchecked(b"model\0"),
-                &self.model
-            );
+            self.program.set_mat4("projection", &self.projection);
+            self.program.set_mat4("model", &self.model);
 
             gl.BindVertexArray(self.vao);
 
@@ -325,24 +318,71 @@ impl Program {
         }
     }
 
-    pub unsafe fn set_mat4(&self, name: &CStr, mat: &Matrix4<f32>) {
+    pub unsafe fn set_mat4(&self, name: &str, mat: &Matrix4<f32>) {
+        let name = CString::new(name).unwrap();
         let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
 
         self.gl.UniformMatrix4fv(uniform_location, 1, gl::FALSE, mat.as_ptr());
     }
 
-    pub unsafe fn set_vec3(&self, name: &CStr, mat: &cgmath::Vector3<f32>) {
+    pub unsafe fn set_vec2(&self, name: &str, vec: &cgmath::Vector2<f32>) {
+        let name = CString::new(name).unwrap();
         let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform2fv(uniform_location, 1, vec.as_ptr());
+    }
 
+    pub unsafe fn set_vec3(&self, name: &str, mat: &cgmath::Vector3<f32>) {
+        let name = CString::new(name).unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
         self.gl.Uniform3fv(uniform_location, 1, mat.as_ptr());
     }
 
-    pub unsafe fn set_color(&self, name: &CStr, color: &canvas::Color) {
-        let uniform_location = self.gl.GetUniformLocation(
-            self.id,
-            name.as_ptr());
+    pub unsafe fn set_vec4(&self, name: &str, vec: &cgmath::Vector4<f32>) {
+        let name = CString::new(name).unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform4fv(uniform_location, 1, vec.as_ptr());
+    }
 
-        self.gl.Uniform3fv(uniform_location, 1, color.to_vec3().as_ptr());
+    pub unsafe fn set_gradient(&self, gradient: &canvas::Gradient) {
+        let name = CString::new("first_color").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform3fv(
+            uniform_location,
+            1,
+            gradient.first_color.to_vec3().as_ptr()
+        );
+
+        let name = CString::new("last_color").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform3fv(
+            uniform_location,
+            1,
+            gradient.last_color.to_vec3().as_ptr()
+        );
+
+        let name = CString::new("start_pos").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        let start_pos = cgmath::Vector2 {
+            x: gradient.start_pos.x,
+            y: gradient.start_pos.y
+        };
+        self.gl.Uniform2fv(
+            uniform_location,
+            1,
+            start_pos.as_ptr()
+        );
+
+        let name = CString::new("end_pos").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        let end_pos = cgmath::Vector2 {
+            x: gradient.end_pos.x,
+            y: gradient.end_pos.y
+        };
+        self.gl.Uniform2fv(
+            uniform_location,
+            1,
+            end_pos.as_ptr()
+        );
     }
 }
 
