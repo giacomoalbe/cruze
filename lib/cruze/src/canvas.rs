@@ -3,6 +3,9 @@ extern crate lyon;
 use lyon::math::{
     point,
     Point,
+    vector,
+    Vector,
+    Angle,
     rect
 };
 
@@ -231,7 +234,16 @@ enum CtxCommand {
     MoveTo(Point),
     LineTo(Point),
     FillColor(Color),
+    Arc(Point, Vector, Angle, Angle),
     Close,
+}
+
+#[derive(PartialEq)]
+enum CtxDirection {
+    CCW,
+    CW,
+    GradientX,
+    GradientY,
 }
 
 struct Ctx {
@@ -240,6 +252,8 @@ struct Ctx {
     mesh: VertexBuffers<FillVertex, u32>,
     primitives: Vec<Primitive>,
     prim_id: usize,
+    path_direction: CtxDirection,
+    gradient_direction: CtxDirection,
     commands: Vec<CtxCommand>,
 }
 
@@ -250,6 +264,8 @@ impl Ctx {
             stroke_tess: StrokeTessellator::new(),
             mesh: VertexBuffers::new(),
             primitives: vec![],
+            gradient_direction: CtxDirection::GradientY,
+            path_direction: CtxDirection::CW,
             prim_id: 0,
             commands: vec![],
         }
@@ -279,6 +295,8 @@ impl Ctx {
 
     fn begin_primitive(&mut self) {
         self.commands.clear();
+        self.path_direction = CtxDirection::CW;
+        self.gradient_direction = CtxDirection::GradientY;
     }
 
     fn end_primitive(&mut self) {
@@ -292,6 +310,9 @@ impl Ctx {
                 CtxCommand::MoveTo(p) => builder.move_to(*p),
                 CtxCommand::FillColor(c) => {
                     current_primitive.color = c.clone();
+                },
+                CtxCommand::Arc(c, r, s, x) => {
+                    builder.arc(*c, *r, *s, *x);
                 },
                 CtxCommand::Close => builder.close(),
             };
@@ -328,12 +349,129 @@ impl Ctx {
         let b = center.y - height / 2.0;
         let t = center.y + height / 2.0;
 
-        self.move_to(point(l, t));
-        self.line_to(point(r, t));
-        self.line_to(point(r, b));
-        self.line_to(point(l, b));
+        if self.path_direction == CtxDirection::CCW {
+            // Start from BottomLeft and go CCW to TopLeft
+            self.move_to(point(l, b));
+            self.line_to(point(r, b));
+            self.line_to(point(r, t));
+            self.line_to(point(l, t));
+        } else {
+            // Start from TopLeft and go CW to BottomLeft
+            self.move_to(point(l, t));
+            self.line_to(point(r, t));
+            self.line_to(point(r, b));
+            self.line_to(point(l, b));
+        }
 
         self.close();
+    }
+
+    fn round_rect(&mut self, center: Point, width: f32, height: f32, radius: f32) {
+        let min_w_h = width.min(height);
+
+        let radius = radius.min(min_w_h / 2.0);
+
+        println!("True radius: {}", radius);
+
+        let radii: Vector = vector(radius, radius);
+
+        let c_left = center.x - width / 2.0 + radius;
+        let c_right = center.x + width / 2.0 - radius;
+        let c_top = center.y + height / 2.0 - radius;
+        let c_bottom = center.y - height / 2.0 + radius;
+
+        let c_tl= point(c_left, c_top);
+        let c_tr = point(c_right, c_top);
+        let c_bl = point(c_left, c_bottom);
+        let c_br = point(c_right, c_bottom);
+
+        let t_l: Point = point(c_left, c_top + radius);
+        let t_r: Point = point(c_right, c_top + radius);
+        let r_t: Point = point(c_right + radius, c_top);
+        let r_b: Point = point(c_right + radius, c_bottom);
+        let b_r: Point = point(c_right, c_bottom - radius);
+        let b_l: Point = point(c_left, c_bottom - radius);
+        let l_b: Point = point(c_left - radius, c_bottom);
+        let l_t: Point = point(c_left - radius, c_top);
+
+        self.move_to(l_t);
+        self.arc(c_tl, radii,Angle::degrees(-90.0), Angle::degrees(180.0));
+        self.line_to(t_r);
+        self.arc(c_tr, radii, Angle::degrees(-90.0), Angle::degrees(90.0));
+        self.line_to(r_b);
+        self.arc(c_br, radii, Angle::degrees(-90.0), Angle::degrees(0.0));
+        self.line_to(b_l);
+        self.arc(c_bl, radii, Angle::degrees(-90.0), Angle::degrees(-90.0));
+        self.line_to(l_t);
+
+        self.close();
+
+        //self.arc(center, radii, Angle::degrees(360.0), Angle::degrees(0.0));
+        //self.arc(center, radii, Angle::degrees(360.0), Angle::degrees(90.0));
+        //self.arc(center, radii, Angle::degrees(360.0 + 90.0), Angle::degrees(360.0));
+        //self.arc(center, radii, Angle::degrees(180.0), Angle::degrees(270.0));
+    }
+
+    fn circle(&mut self, center: Point, radius: f32) {
+        let radii: Vector = vector(radius, radius);
+
+        let (mut start_angle, mut arc_angle) = (180.0, 360.0);
+
+        if self.path_direction == CtxDirection::CCW {
+            start_angle = 0.0;
+            arc_angle = -360.0;
+        }
+
+        self.move_to(point(center.x - radius, center.y));
+        self.arc(
+            center,
+            radii,
+            Angle::degrees(arc_angle),
+            Angle::degrees(start_angle)
+        );
+
+        self.close();
+    }
+
+    fn wind_rect(&mut self, center: Point, width: f32, height: f32, inset: f32) {
+        let l = center.x - width / 2.0;
+        let r = center.x + width / 2.0;
+        let b = center.y - height / 2.0;
+        let t = center.y + height / 2.0;
+
+        let l_i = l + inset;
+        let r_i = r - inset;
+        let t_i = t - inset;
+        let b_i = b + inset;
+
+        let tl = point(l, t);
+        let tr = point(r, t);
+        let bl = point(l, b);
+        let br = point(r, b);
+
+        let tl_i: Point = point(l_i, t_i);
+        let tr_i: Point = point(r_i, t_i);
+        let bl_i: Point = point(l_i, b_i);
+        let br_i: Point = point(r_i, b_i);
+
+        self.move_to(tl);
+        self.line_to(tr);
+        self.line_to(br);
+        self.line_to(bl);
+        self.line_to(tl);
+
+        self.close();
+
+        self.move_to(tl_i);
+        self.line_to(tr_i);
+        self.line_to(br_i);
+        self.line_to(bl_i);
+
+        self.close();
+    }
+
+    fn set_direction(&mut self, direction: CtxDirection) {
+        self.path_direction = direction;
     }
 
     fn fill_color(&mut self, c: Color) {
@@ -342,6 +480,17 @@ impl Ctx {
 
     fn move_to(&mut self, p: Point) {
         self.commands.push(CtxCommand::MoveTo(p));
+    }
+
+    fn arc(&mut self, center: Point, radii: Vector, sweep_angle: Angle, x_rotation: Angle) {
+        // Draws an arc with radii { radius.x, radius.y }, centered in center
+        // from x_rotation for sweep_angle's radians
+        self.commands.push(CtxCommand::Arc(
+            center,
+            radii,
+            sweep_angle,
+            x_rotation,
+        ));
     }
 
     fn line_to(&mut self, p: Point) {
@@ -395,8 +544,39 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     ctx.end_primitive();
 
     ctx.begin_primitive();
+    ctx.rect(point(500.0, 200.0), 5.0, 5.0);
+    ctx.fill_color(color(1.0, 0.0, 0.0));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
     ctx.rect(point(200.0, 100.0), 200.0, 60.0);
     ctx.fill_color(color(0.0, 1.0, 1.0));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(150.0, 400.0), 250.0, 150.0, 5.0);
+    ctx.fill_color(color(1.0, 1.0, 1.0));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
+    ctx.circle(point(500.0, 200.0), 80.0);
+    ctx.fill_color(color(0.0, 0.5, 0.8));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(200.0, 200.0), 80.0, 80.0, 10.0);
+    ctx.fill_color(color(1.0, 0.0, 0.0));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
+    ctx.rect(point(200.0, 200.0), 40.0, 40.0);
+    ctx.fill_color(color(1.0, 1.0, 0.0));
+    ctx.end_primitive();
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(400.0, 500.0), 100.0, 80.0, 10.0);
+    ctx.rect(point(400.0, 500.0), 80.0, 60.0);
+    ctx.fill_color(color(0.0, 0.5, 1.0));
     ctx.end_primitive();
 
     ctx.end_mesh()
