@@ -9,18 +9,26 @@ use lyon::math::{
     rect
 };
 
-use lyon::tessellation::basic_shapes::*;
-use lyon::tessellation::{
-    FillOptions,
-    FillTessellator,
-    StrokeTessellator,
-    FillVertex
+use lyon::path::{
+    Path,
 };
 
-use lyon::path::Path;
+use lyon::tessellation::geometry_builder::{
+    BuffersBuilder,
+    VertexBuffers,
+    VertexConstructor,
+};
+
+use lyon::tessellation::{
+    FillVertex,
+    FillOptions,
+    FillTessellator,
+    StrokeVertex,
+    StrokeOptions,
+    StrokeTessellator,
+};
+
 use lyon::path::builder::*;
-use lyon::tessellation::geometry_builder::{BuffersBuilder, VertexBuffers};
-use std::borrow::BorrowMut;
 use std::ffi::{CStr};
 
 use cgmath::prelude::*;
@@ -95,6 +103,7 @@ impl Screen {
     }
 }
 
+/*
 pub struct Rectangle {
     center: Point2<f32>,
     size: Size<f32>,
@@ -215,17 +224,48 @@ impl Rectangle {
         * self.scale_mat
     }
 }
+*/
 
 pub struct Primitive {
     color: Color,
     num_vertices: u32,
+    stroke_width: f32,
 }
 
 impl Primitive {
     pub fn new() -> Primitive {
         Primitive {
             color: Color::new(1.0, 0.0, 0.0),
+            stroke_width: 0.0,
             num_vertices: 0
+        }
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+struct CtxVertex {
+    position: Point
+}
+
+// Handle conversions to the gfx vertex format
+impl VertexConstructor<FillVertex, CtxVertex> for CtxVertex {
+    fn new_vertex(&mut self, vertex: FillVertex) -> CtxVertex {
+        assert!(!vertex.position.x.is_nan());
+        assert!(!vertex.position.y.is_nan());
+
+        CtxVertex {
+            position: vertex.position,
+        }
+    }
+}
+
+impl VertexConstructor<StrokeVertex, CtxVertex> for CtxVertex {
+    fn new_vertex(&mut self, vertex: StrokeVertex) -> CtxVertex {
+        assert!(!vertex.position.x.is_nan());
+        assert!(!vertex.position.y.is_nan());
+
+        CtxVertex {
+            position: vertex.position,
         }
     }
 }
@@ -233,7 +273,8 @@ impl Primitive {
 enum CtxCommand {
     MoveTo(Point),
     LineTo(Point),
-    FillColor(Color),
+    Color(Color),
+    StrokeWidth(f32),
     Arc(Point, Vector, Angle, Angle),
     Close,
 }
@@ -249,7 +290,7 @@ enum CtxDirection {
 struct Ctx {
     fill_tess: FillTessellator,
     stroke_tess: StrokeTessellator,
-    mesh: VertexBuffers<FillVertex, u32>,
+    mesh: VertexBuffers<CtxVertex, u32>,
     primitives: Vec<Primitive>,
     prim_id: usize,
     path_direction: CtxDirection,
@@ -299,7 +340,7 @@ impl Ctx {
         self.gradient_direction = CtxDirection::GradientY;
     }
 
-    fn end_primitive(&mut self) {
+    fn build_path(&mut self) -> (Path, Primitive) {
         let mut current_primitive = Primitive::new();
 
         let mut builder = Path::builder();
@@ -308,8 +349,11 @@ impl Ctx {
             match command {
                 CtxCommand::LineTo(p) => builder.line_to(*p),
                 CtxCommand::MoveTo(p) => builder.move_to(*p),
-                CtxCommand::FillColor(c) => {
+                CtxCommand::Color(c) => {
                     current_primitive.color = c.clone();
+                },
+                CtxCommand::StrokeWidth(w) => {
+                    current_primitive.stroke_width = *w;
                 },
                 CtxCommand::Arc(c, r, s, x) => {
                     builder.arc(*c, *r, *s, *x);
@@ -320,14 +364,57 @@ impl Ctx {
 
         let path = builder.build();
 
-        #[derive(Clone, Debug, Copy)]
-        struct MyVertex { position: [f32; 2], normal: [f32; 2] };
+        (path, current_primitive)
+    }
+
+    fn fill(&mut self) {
+        // Ends the current primitive
+        // and fills current path
+        // with the fillPaint provided
+        let (path, mut current_primitive) = self.build_path();
+
+        let fill_options = FillOptions
+            ::tolerance(0.01);
 
         let result = self.fill_tess.tessellate_path(
             &path,
-            &FillOptions::default(),
+            &fill_options,
             &mut BuffersBuilder::new(&mut self.mesh, |vertex : FillVertex| {
-                vertex
+                CtxVertex {
+                    position: vertex.position
+                }
+            }),
+        );
+
+        match result {
+            Ok(result) => {
+                current_primitive.num_vertices = result.indices;
+            },
+            Err(_) => {
+                println!("Error during tesselletion");
+            }
+        }
+
+        self.primitives.push(current_primitive);
+    }
+
+    fn stroke(&mut self) {
+        // Ends the current primitive
+        // and draws the stroke with the given
+        // color and path
+        let (path, mut current_primitive) = self.build_path();
+
+        let stroke_options = StrokeOptions
+            ::tolerance(0.01)
+            .with_line_width(current_primitive.stroke_width);
+
+        let result = self.stroke_tess.tessellate_path(
+            &path,
+            &stroke_options,
+            &mut BuffersBuilder::new(&mut self.mesh, |vertex : StrokeVertex| {
+                CtxVertex {
+                    position: vertex.position
+                }
             }),
         );
 
@@ -474,8 +561,12 @@ impl Ctx {
         self.path_direction = direction;
     }
 
-    fn fill_color(&mut self, c: Color) {
-        self.commands.push(CtxCommand::FillColor(c));
+    fn color(&mut self, c: Color) {
+        self.commands.push(CtxCommand::Color(c));
+    }
+
+    fn stroke_width(&mut self, width: f32) {
+        self.commands.push(CtxCommand::StrokeWidth(width));
     }
 
     fn move_to(&mut self, p: Point) {
@@ -513,71 +604,78 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     ctx.line_to(point(100.0, 200.0));
     ctx.line_to(point(200.0, 200.0));
     ctx.line_to(point(200.0, 100.0));
-    ctx.fill_color(color(0.5, 0.1, 1.0));
+    ctx.color(color(0.5, 0.1, 1.0));
     ctx.close();
 
-    ctx.end_primitive();
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.move_to(point(400.0, 400.0));
     ctx.line_to(point(400.0, 500.0));
     ctx.line_to(point(500.0, 500.0));
     ctx.line_to(point(500.0, 400.0));
-    ctx.fill_color(color(0.1, 0.8, 0.2));
+    ctx.color(color(0.1, 0.8, 0.2));
     ctx.close();
-    ctx.end_primitive();
+    ctx.fill();
     */
 
     ctx.begin_primitive();
     ctx.rect(point(300.0, 300.0), 200.0, 60.0);
-    ctx.fill_color(color(1.0, 0.0, 0.0));
-    ctx.end_primitive();
+    ctx.color(color(1.0, 0.0, 0.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.rect(point(600.0, 400.0), 200.0, 60.0);
-    ctx.fill_color(color(0.0, 1.0, 1.0));
-    ctx.end_primitive();
+    ctx.color(color(0.0, 1.0, 1.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.rect(point(400.0, 60.0), 50.0, 50.0);
-    ctx.fill_color(color(0.0, 0.0, 1.0));
-    ctx.end_primitive();
+    ctx.color(color(0.0, 0.0, 1.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.rect(point(500.0, 200.0), 5.0, 5.0);
-    ctx.fill_color(color(1.0, 0.0, 0.0));
-    ctx.end_primitive();
+    ctx.color(color(1.0, 0.0, 0.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.rect(point(200.0, 100.0), 200.0, 60.0);
-    ctx.fill_color(color(0.0, 1.0, 1.0));
-    ctx.end_primitive();
+    ctx.color(color(0.0, 1.0, 1.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.round_rect(point(150.0, 400.0), 250.0, 150.0, 5.0);
-    ctx.fill_color(color(1.0, 1.0, 1.0));
-    ctx.end_primitive();
+    ctx.color(color(1.0, 1.0, 1.0));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.circle(point(500.0, 200.0), 80.0);
-    ctx.fill_color(color(0.0, 0.5, 0.8));
-    ctx.end_primitive();
+    ctx.color(color(0.0, 0.5, 0.8));
+    ctx.fill();
 
     ctx.begin_primitive();
     ctx.round_rect(point(200.0, 200.0), 80.0, 80.0, 10.0);
-    ctx.fill_color(color(1.0, 0.0, 0.0));
-    ctx.end_primitive();
+    ctx.color(color(1.0, 0.0, 0.0));
+    ctx.fill();
 
     ctx.begin_primitive();
-    ctx.rect(point(200.0, 200.0), 40.0, 40.0);
-    ctx.fill_color(color(1.0, 1.0, 0.0));
-    ctx.end_primitive();
+    ctx.round_rect(point(200.0, 200.0), 200.0, 200.0, 5.0);
+    ctx.color(color(0.0, 0.0, 1.0));
+    ctx.fill();
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(200.0, 200.0), 200.0, 200.0, 5.0);
+    ctx.color(color(1.0, 1.0, 1.0));
+    ctx.stroke_width(3.0);
+    ctx.stroke();
+
 
     ctx.begin_primitive();
     ctx.round_rect(point(400.0, 500.0), 100.0, 80.0, 10.0);
     ctx.rect(point(400.0, 500.0), 80.0, 60.0);
-    ctx.fill_color(color(0.0, 0.5, 1.0));
-    ctx.end_primitive();
+    ctx.color(color(0.0, 0.5, 1.0));
+    ctx.fill();
 
     ctx.end_mesh()
 }

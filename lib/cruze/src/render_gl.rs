@@ -55,6 +55,7 @@ impl Renderer {
         renderer
     }
 
+    /*
     fn generate_geometry() -> canvas::Rectangle {
         // The geometry has to be generated from
         // the Widget Tree
@@ -71,6 +72,7 @@ impl Renderer {
 
         rectangle
     }
+    */
 
     fn generate_geometry_primitives(&mut self) {
         let (vertices, indices, primitives) = canvas::generate_mesh();
