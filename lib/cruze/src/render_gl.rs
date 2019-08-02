@@ -2,12 +2,27 @@ use gl;
 use super::canvas;
 
 use std;
-use std::ffi::{CString, CStr};
+use std::ffi::{
+    CString,
+    CStr
+};
 
-use cgmath::{Matrix, Matrix4, Vector4};
+use cgmath::{
+    Matrix,
+    Matrix4,
+    Vector4
+};
+
 use cgmath::prelude::*;
 
 use glutin::event::VirtualKeyCode;
+
+use glyph_brush::{
+    BrushAction,
+    BrushError,
+    GlyphBrushBuilder,
+    Section
+};
 
 pub struct Renderer {
     gl: gl::Gl,
@@ -18,6 +33,9 @@ pub struct Renderer {
     projection: Matrix4<f32>,
     model: Matrix4<f32>,
     vao: gl::types::GLuint,
+    pbo: gl::types::GLuint,
+    tbo: gl::types::GLuint,
+    ebo: gl::types::GLuint,
 }
 
 impl Renderer {
@@ -48,6 +66,9 @@ impl Renderer {
             primitives: vec![],
             program: program,
             vao: 0,
+            pbo: 0,
+            tbo: 0,
+            ebo: 0,
         };
 
         // Enable blending
@@ -57,29 +78,44 @@ impl Renderer {
             gl.Enable(gl::MULTISAMPLE);
         }
 
+        renderer.generate_geometry_primitives();
         renderer.bind_vertex_arrays();
+        //renderer.bind_glyph_renderer();
 
         renderer
     }
 
-    /*
-    fn generate_geometry() -> canvas::Rectangle {
-        // The geometry has to be generated from
-        // the Widget Tree
+    fn bind_glyph_renderer(&mut self) {
+        let dejavu: &[u8] = include_bytes!("../fonts/DejaVuSans.ttf");
+        let mut glyph_brush = GlyphBrushBuilder::using_font_bytes(dejavu).build();
 
-        let mut rectangle = canvas::Rectangle::new(
-            canvas::Point2::new(0.0, 0.0),
-            canvas::Size::new(200.0, 200.0),
-            5.0
-        );
+        println!("Texture Dimension: {:#?}", glyph_brush.texture_dimensions());
 
-        rectangle.translate(cgmath::Vector2::new(0.0, 0.0));
-        rectangle.rotate(30.0);
-        rectangle.scale(1.7);
+        let text = "My First Text with glyph_brush";
 
-        rectangle
+        glyph_brush.queue(Section {
+            text: text,
+            ..Section::default()
+        });
+
+        match glyph_brush.process_queued(
+            |rect, tex_data| {
+            },
+            |vertex_data| {
+            }
+        ) {
+            Ok(BrushAction::Draw(vertices)) => {
+                // Draw new vertices.
+                println!("{:#?}", vertices);
+            }
+            Ok(BrushAction::ReDraw) => {
+                // Re-draw last frame's vertices unmodified.
+            }
+            Err(BrushError::TextureTooSmall { suggested }) => {
+                // Enlarge texture + glyph_brush texture cache and retry.
+            }
+        }
     }
-    */
 
     fn generate_geometry_primitives(&mut self) {
         let (vertices, indices, primitives) = canvas::generate_mesh();
@@ -90,19 +126,25 @@ impl Renderer {
     }
 
     fn bind_vertex_arrays(&mut self) {
-        self.generate_geometry_primitives();
+        // pbo = PRIMITIVE Buffer Object, keeps everything related to primitive
+        // tbo = TEXT Buffer Object, keeps all data relative to font rendering
+        // ebo = ELEMENT Buffer Object, data relative to Indices
 
-        self.vao = unsafe {
+        let (vao, pbo, tbo, ebo) = unsafe {
             let gl = self.gl.clone();
 
-            let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
+            let (mut vao, mut pbo, mut tbo, mut ebo) = (0, 0, 0, 0);
 
             gl.GenVertexArrays(1, &mut vao);
-            gl.GenBuffers(1, &mut vbo);
-            gl.GenBuffers(1, &mut ebo);
             gl.BindVertexArray(vao);
 
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl.GenBuffers(1, &mut pbo);
+            gl.GenBuffers(1, &mut ebo);
+            gl.GenBuffers(1, &mut tbo);
+
+            gl.BindBuffer(gl::ARRAY_BUFFER, pbo);
+            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+
             gl.BufferData(
                 gl::ARRAY_BUFFER,
                 (self.vertices.len() * std::mem::size_of::<gl::types::GLuint>()) as gl::types::GLsizeiptr,
@@ -110,7 +152,6 @@ impl Renderer {
                 gl::STATIC_DRAW
             );
 
-            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
             gl.BufferData(
                 gl::ELEMENT_ARRAY_BUFFER,
                 (self.indices.len() * std::mem::size_of::<gl::types::GLfloat>()) as gl::types::GLsizeiptr,
@@ -119,6 +160,8 @@ impl Renderer {
             );
 
             // Enable location "Position (0)" in Vertex Shader
+            // This must be done AFTER buffers have been
+            // filled with data
             gl.EnableVertexAttribArray(0);
             gl.VertexAttribPointer(
                 0,
@@ -129,25 +172,17 @@ impl Renderer {
                 std::ptr::null()
             );
 
-            /*
-            // Enable location "Color(1)" in Vertex Shader
-            gl.EnableVertexAttribArray(1);
-            gl.VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                (3 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
-            );
-            */
-
             // Unbind both VBO and VAO
             gl.BindBuffer(gl::ARRAY_BUFFER, 0);
             gl.BindVertexArray(0);
 
-            vao
+            (vao, pbo, tbo, ebo)
         };
+
+        self.vao = vao;
+        self.pbo = pbo;
+        self.tbo = tbo;
+        self.ebo = ebo;
     }
 
     pub fn draw(&mut self) {
@@ -157,19 +192,46 @@ impl Renderer {
             gl.ClearColor(0.3, 0.3, 0.5, 0.1);
             gl.Clear(gl::COLOR_BUFFER_BIT);
 
+            gl.BindVertexArray(self.vao);
+
             self.program.set_used();
 
             self.program.set_mat4("projection", &self.projection);
             self.program.set_mat4("model", &self.model);
 
-            gl.BindVertexArray(self.vao);
-
-            canvas::draw_primitives(
-                gl,
-                &mut self.program,
-                &self.primitives
-            );
+            self.draw_primitives();
         }
+    }
+
+    pub fn draw_primitives(&mut self) {
+        let start_time = std::time::Instant::now();
+
+        let gl = self.gl.clone();
+
+        let mut tris_offset = 0;
+
+        for primitive in self.primitives.iter() {
+            unsafe {
+                self.program.set_vec4("bbox", &primitive.bbox);
+                self.program.set_gradient(&primitive.gradient);
+
+                gl.BindVertexArray(self.vao);
+                gl.BindBuffer(gl::ARRAY_BUFFER, self.pbo);
+
+                gl.DrawElements(
+                    gl::TRIANGLES,
+                    primitive.num_vertices as i32,
+                    gl::UNSIGNED_INT,
+                    (tris_offset * std::mem::size_of::<gl::types::GLuint>())
+                    as *const std::ffi::c_void
+                );
+
+            }
+
+            tris_offset += primitive.num_vertices as usize;
+        }
+
+        //println!("Frame render: {}", start_time.elapsed().as_micros());
     }
 
     pub fn resize(&mut self, size: glutin::dpi::LogicalSize) {
@@ -184,77 +246,77 @@ impl Renderer {
             );
 
             /*
-            self.rectangle.translate(
-                cgmath::Vector2::new(
-                    size.width as f32 / 2.0,
-                    size.height as f32 / 2.0
-                )
-            );
+               self.rectangle.translate(
+               cgmath::Vector2::new(
+               size.width as f32 / 2.0,
+               size.height as f32 / 2.0
+               )
+               );
 
-            self.model = self.rectangle.model();
-            */
+               self.model = self.rectangle.model();
+               */
 
             self.gl.Viewport(0, 0, size.width as i32, size.height as i32);
         }
     }
 
     /*
-    pub fn send_key(&mut self, key: VirtualKeyCode) {
-        match key {
-            VirtualKeyCode::R => {
-                let current_rotation = self.rectangle.current_rotation + 15.0;
+       pub fn send_key(&mut self, key: VirtualKeyCode) {
+       match key {
+       VirtualKeyCode::R => {
+       let current_rotation = self.rectangle.current_rotation + 15.0;
 
-                self.rectangle.rotate(current_rotation);
-            },
-            VirtualKeyCode::D => {
-                let current_rotation = self.rectangle.current_rotation - 15.0;
+       self.rectangle.rotate(current_rotation);
+       },
+       VirtualKeyCode::D => {
+       let current_rotation = self.rectangle.current_rotation - 15.0;
 
-                self.rectangle.rotate(current_rotation);
-            },
-            VirtualKeyCode::Left => {
-                let mut current_translate = self.rectangle.current_translate;
+       self.rectangle.rotate(current_rotation);
+       },
+       VirtualKeyCode::Left => {
+       let mut current_translate = self.rectangle.current_translate;
 
-                current_translate.x -= 10.0;
+       current_translate.x -= 10.0;
 
-                self.rectangle.translate(current_translate);
-            },
-            VirtualKeyCode::Right => {
-                let mut current_translate = self.rectangle.current_translate;
+       self.rectangle.translate(current_translate);
+       },
+       VirtualKeyCode::Right => {
+       let mut current_translate = self.rectangle.current_translate;
 
-                current_translate.x += 10.0;
+       current_translate.x += 10.0;
 
-                self.rectangle.translate(current_translate);
-            },
-            VirtualKeyCode::Up => {
-                let mut current_translate = self.rectangle.current_translate;
+       self.rectangle.translate(current_translate);
+       },
+       VirtualKeyCode::Up => {
+       let mut current_translate = self.rectangle.current_translate;
 
-                current_translate.y += 10.0;
+       current_translate.y += 10.0;
 
-                self.rectangle.translate(current_translate);
-            },
-            VirtualKeyCode::Down => {
-                let mut current_translate = self.rectangle.current_translate;
+       self.rectangle.translate(current_translate);
+       },
+       VirtualKeyCode::Down => {
+       let mut current_translate = self.rectangle.current_translate;
 
-                current_translate.y -= 10.0;
+       current_translate.y -= 10.0;
 
-                self.rectangle.translate(current_translate);
-            },
-            VirtualKeyCode::S => {
-                let current_scale = self.rectangle.current_scale + 0.1;
+       self.rectangle.translate(current_translate);
+       },
+       VirtualKeyCode::S => {
+       let current_scale = self.rectangle.current_scale + 0.1;
 
-                self.rectangle.scale(current_scale);
-            },
-            VirtualKeyCode::X => {
-                let current_scale = self.rectangle.current_scale - 0.1;
+       self.rectangle.scale(current_scale);
+       },
+       VirtualKeyCode::X => {
+       let current_scale = self.rectangle.current_scale - 0.1;
 
-                self.rectangle.scale(current_scale);
-            },
-            _ => ()
-        };
+       self.rectangle.scale(current_scale);
+       },
+       _ => ()
+       };
 
-        self.model = self.rectangle.model()
-    }
-    */
+       self.model = self.rectangle.model()
+       }
+       */
 }
 
 pub struct Program {

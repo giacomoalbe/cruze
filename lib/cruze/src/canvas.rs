@@ -29,6 +29,8 @@ use lyon::tessellation::{
 };
 
 use lyon::path::builder::*;
+
+
 use std::ffi::{CStr};
 
 use cgmath::prelude::*;
@@ -96,125 +98,125 @@ impl<T> Size<T> {
 }
 
 /*
-pub struct Rectangle {
-    center: Point2<f32>,
-    size: Size<f32>,
-    radius: f32,
-    pub current_rotation: f32,
-    pub current_scale: f32,
-    pub current_translate: cgmath::Vector2<f32>,
-    rotation_mat: cgmath::Matrix4<f32>,
-    translation_mat: cgmath::Matrix4<f32>,
-    scale_mat: cgmath::Matrix4<f32>,
+   pub struct Rectangle {
+   center: Point2<f32>,
+   size: Size<f32>,
+   radius: f32,
+   pub current_rotation: f32,
+   pub current_scale: f32,
+   pub current_translate: cgmath::Vector2<f32>,
+   rotation_mat: cgmath::Matrix4<f32>,
+   translation_mat: cgmath::Matrix4<f32>,
+   scale_mat: cgmath::Matrix4<f32>,
+   }
+
+   impl Rectangle {
+   pub fn new(center: Point2<f32>, size: Size<f32>, radius: f32) -> Rectangle {
+   Rectangle {
+   center,
+   size,
+   radius,
+   current_scale: 1.0,
+   current_rotation: 0.0,
+   current_translate: cgmath::Vector2::new(0.0, 0.0),
+   rotation_mat: cgmath::Matrix4::identity(),
+   translation_mat: cgmath::Matrix4::identity(),
+   scale_mat: cgmath::Matrix4::identity(),
+   }
+   }
+
+   pub fn geometry(&self) ->  (Vec<f32>, Vec<u32>) {
+   #[derive(Copy, Clone, Debug)]
+   struct MyVertex {
+   x: f32,
+   y: f32,
+   z: f32
+   };
+
+   let tl = Point2 {
+   x: self.center.x - (self.size.width / 2.0),
+   y: self.center.y - (self.size.height / 2.0)
+   };
+
+   println!("{:#?}", tl);
+
+   let mut geometry: VertexBuffers<MyVertex, u16> =
+   VertexBuffers::new();
+
+   let options = FillOptions::tolerance(0.0001);
+
+   let result = fill_rounded_rectangle(
+   &rect(tl.x, tl.y, self.size.width, self.size.height),
+   &BorderRadii {
+   top_left: self.radius,
+   top_right: self.radius,
+   bottom_left: self.radius,
+   bottom_right: self.radius
+   },
+   &options,
+   &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
+   MyVertex {
+   x: vertex.position.x,
+   y: vertex.position.y,
+   z: 0.0
+   }
+   }),
+   ).unwrap();
+
+   let mut vertices: Vec<f32> = Vec::new();
+   let mut indices: Vec<u32> = Vec::new();
+
+   for vertex in geometry.vertices.iter() {
+   vertices.push(vertex.x);
+vertices.push(vertex.y);
+vertices.push(vertex.z);
 }
 
-impl Rectangle {
-    pub fn new(center: Point2<f32>, size: Size<f32>, radius: f32) -> Rectangle {
-        Rectangle {
-            center,
-            size,
-            radius,
-            current_scale: 1.0,
-            current_rotation: 0.0,
-            current_translate: cgmath::Vector2::new(0.0, 0.0),
-            rotation_mat: cgmath::Matrix4::identity(),
-            translation_mat: cgmath::Matrix4::identity(),
-            scale_mat: cgmath::Matrix4::identity(),
-        }
+indices = geometry
+    .indices
+    .iter()
+.map(|index| *index as u32)
+    .collect();
+
+(vertices, indices)
     }
 
-    pub fn geometry(&self) ->  (Vec<f32>, Vec<u32>) {
-        #[derive(Copy, Clone, Debug)]
-        struct MyVertex {
-            x: f32,
-            y: f32,
-            z: f32
-        };
+pub fn rotate(&mut self, angle: f32) {
+    self.current_rotation = angle;
 
-        let tl = Point2 {
-            x: self.center.x - (self.size.width / 2.0),
-            y: self.center.y - (self.size.height / 2.0)
-        };
-
-        println!("{:#?}", tl);
-
-        let mut geometry: VertexBuffers<MyVertex, u16> =
-            VertexBuffers::new();
-
-        let options = FillOptions::tolerance(0.0001);
-
-        let result = fill_rounded_rectangle(
-            &rect(tl.x, tl.y, self.size.width, self.size.height),
-            &BorderRadii {
-                top_left: self.radius,
-                top_right: self.radius,
-                bottom_left: self.radius,
-                bottom_right: self.radius
-            },
-            &options,
-            &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
-                MyVertex {
-                    x: vertex.position.x,
-                    y: vertex.position.y,
-                    z: 0.0
-                }
-            }),
-        ).unwrap();
-
-        let mut vertices: Vec<f32> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
-
-        for vertex in geometry.vertices.iter() {
-            vertices.push(vertex.x);
-            vertices.push(vertex.y);
-            vertices.push(vertex.z);
-        }
-
-        indices = geometry
-            .indices
-            .iter()
-            .map(|index| *index as u32)
-            .collect();
-
-        (vertices, indices)
-    }
-
-    pub fn rotate(&mut self, angle: f32) {
-        self.current_rotation = angle;
-
-        self.rotation_mat =
-            cgmath::Matrix4::from_translation(
-                cgmath::Vector3::new(self.center.x, self.center.y, 0.0)
-            )
-            * cgmath::Matrix4::from_angle_z(cgmath::Deg(angle)) *
-            cgmath::Matrix4::from_translation(
-                cgmath::Vector3::new(-self.center.x, -self.center.y, 0.0)
-            );
-    }
-
-    pub fn scale(&mut self, factor: f32) {
-        self.current_scale = factor;
-
-        self.scale_mat = cgmath::Matrix4::from_scale(factor);
-    }
-
-    pub fn translate(&mut self, direction: cgmath::Vector2<f32>) {
-        self.current_translate = direction;
-
-        self.translation_mat = cgmath::Matrix4::from_translation(
-            cgmath::Vector3::new(
-                direction.x,
-                direction.y,
-                0.0
-            )
+    self.rotation_mat =
+        cgmath::Matrix4::from_translation(
+            cgmath::Vector3::new(self.center.x, self.center.y, 0.0)
+        )
+        * cgmath::Matrix4::from_angle_z(cgmath::Deg(angle)) *
+        cgmath::Matrix4::from_translation(
+            cgmath::Vector3::new(-self.center.x, -self.center.y, 0.0)
         );
-    }
+}
 
-    pub fn model(&self) -> cgmath::Matrix4<f32> {
-        self.translation_mat
+pub fn scale(&mut self, factor: f32) {
+    self.current_scale = factor;
+
+    self.scale_mat = cgmath::Matrix4::from_scale(factor);
+}
+
+pub fn translate(&mut self, direction: cgmath::Vector2<f32>) {
+    self.current_translate = direction;
+
+    self.translation_mat = cgmath::Matrix4::from_translation(
+        cgmath::Vector3::new(
+            direction.x,
+            direction.y,
+            0.0
+        )
+    );
+}
+
+pub fn model(&self) -> cgmath::Matrix4<f32> {
+    self.translation_mat
         * self.rotation_mat
         * self.scale_mat
-    }
+}
 }
 */
 
@@ -247,7 +249,7 @@ impl Gradient {
         end_pos: Vector,
         first_color: Color,
         last_color: Color)
-    -> Gradient
+        -> Gradient
     {
         Gradient {
             radius,
@@ -262,10 +264,10 @@ impl Gradient {
 
 #[derive(Debug)]
 pub struct Primitive {
-    gradient: Gradient,
-    num_vertices: u32,
-    stroke_width: f32,
-    bbox: cgmath::Vector4<f32>,
+    pub gradient: Gradient,
+    pub num_vertices: u32,
+    pub stroke_width: f32,
+    pub bbox: cgmath::Vector4<f32>,
 }
 
 impl Primitive {
@@ -307,16 +309,18 @@ impl VertexConstructor<StrokeVertex, CtxVertex> for CtxVertex {
     }
 }
 
+#[derive(Debug)]
 enum CtxCommand {
     MoveTo(Point),
     LineTo(Point),
     Gradient(CtxDirection, Color, Color),
     StrokeWidth(f32),
     Arc(Point, Vector, Angle, Angle),
+    Text(Point, String),
     Close,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum CtxDirection {
     CCW,
     CW,
@@ -403,8 +407,8 @@ impl Ctx {
                             current_primitive.gradient = Gradient {
                                 radius: 0.0,
                                 gradient_type: 0,
-                                start_pos: vector(1.0, 0.5),
-                                end_pos: vector(0.0, 0.5),
+                                start_pos: vector(0.0, 0.5),
+                                end_pos: vector(1.0, 0.5),
                                 first_color: *f_c,
                                 last_color: *l_c
                             };
@@ -427,6 +431,9 @@ impl Ctx {
                 },
                 CtxCommand::Arc(c, r, s, x) => {
                     builder.arc(*c, *r, *s, *x);
+                },
+                CtxCommand::Text(c, t) => {
+                    println!("Text: {}", *t);
                 },
                 CtxCommand::Close => builder.close(),
             };
@@ -512,6 +519,12 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
+    fn text(&mut self, center: Point, chars: String) {
+        self.commands.push(CtxCommand::Text(center, chars));
+
+        self.fill();
+    }
+
     fn rect(&mut self, center: Point, width: f32, height: f32) {
         let l = center.x - width / 2.0;
         let r = center.x + width / 2.0;
@@ -572,11 +585,6 @@ impl Ctx {
         self.line_to(l_t);
 
         self.close();
-
-        //self.arc(center, radii, Angle::degrees(360.0), Angle::degrees(0.0));
-        //self.arc(center, radii, Angle::degrees(360.0), Angle::degrees(90.0));
-        //self.arc(center, radii, Angle::degrees(360.0 + 90.0), Angle::degrees(360.0));
-        //self.arc(center, radii, Angle::degrees(180.0), Angle::degrees(270.0));
     }
 
     fn circle(&mut self, center: Point, radius: f32) {
@@ -626,9 +634,9 @@ impl Ctx {
 
     fn gradient_radial(&mut self, first_color: Color, last_color: Color, center: Vector, radius: f32) {
         self.commands.push(CtxCommand::Gradient(
-            CtxDirection::GradientRadial(center, radius),
-            first_color,
-            last_color,
+                CtxDirection::GradientRadial(center, radius),
+                first_color,
+                last_color,
         ));
     }
 
@@ -644,10 +652,10 @@ impl Ctx {
         // Draws an arc with radii { radius.x, radius.y }, centered in center
         // from x_rotation for sweep_angle's radians
         self.commands.push(CtxCommand::Arc(
-            center,
-            radii,
-            sweep_angle,
-            x_rotation,
+                center,
+                radii,
+                sweep_angle,
+                x_rotation,
         ));
     }
 
@@ -665,84 +673,32 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
 
     ctx.begin_mesh();
 
-    /*
     ctx.begin_primitive();
-    ctx.rect(point(300.0, 300.0), 200.0, 60.0);
-    ctx.color(color(1.0, 0.0, 0.0));
+    ctx.circle(point(400.0, 300.0), 100.0);
+    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.color(Color::from_rgba(1.0, 1.0, 1.0, 0.3));
     ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.rect(point(600.0, 400.0), 200.0, 60.0);
-    ctx.color(color(0.0, 1.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.rect(point(400.0, 60.0), 50.0, 50.0);
-    ctx.color(color(0.0, 0.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.rect(point(500.0, 200.0), 5.0, 5.0);
-    ctx.color(color(1.0, 0.0, 0.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.rect(point(200.0, 100.0), 200.0, 60.0);
-    ctx.color(color(0.0, 1.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.round_rect(point(150.0, 400.0), 250.0, 150.0, 5.0);
-    ctx.color(color(1.0, 1.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.circle(point(500.0, 200.0), 80.0);
-    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.round_rect(point(200.0, 200.0), 80.0, 80.0, 10.0);
-    ctx.color(color(1.0, 0.0, 0.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.round_rect(point(200.0, 200.0), 200.0, 200.0, 5.0);
-    ctx.color(color(0.0, 0.0, 1.0));
-    ctx.fill();
-
-    ctx.begin_primitive();
-    ctx.round_rect(point(200.0, 200.0), 200.0, 200.0, 5.0);
-    ctx.color(color(1.0, 1.0, 1.0));
-    ctx.stroke_width(3.0);
-    ctx.stroke();
-
-    ctx.begin_primitive();
-    ctx.round_rect(point(400.0, 500.0), 100.0, 80.0, 10.0);
-    ctx.rect(point(400.0, 500.0), 80.0, 60.0);
-    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 1.0, 0.0));
-    ctx.fill();
-    */
 
     ctx.begin_primitive();
     ctx.circle(point(400.0, 300.0), 100.0);
     //ctx.circle(point(300.0, 200.0), 48.0);
     ctx.gradient_radial(
-        Color::from_rgba(1.0, 0.0, 0.0, 1.0),
+        Color::from_rgba(1.0, 1.0, 0.0, 1.0),
         Color::from_rgba(0.0, 0.0, 0.0, 0.0),
         vector(400.0, 300.0),
-        50.0,
+        120.0,
     );
     ctx.fill();
 
-    /*
     ctx.begin_primitive();
-    ctx.circle(point(400.0, 300.0), 30.0);
+    ctx.circle(point(400.0, 300.0), 100.0);
     //ctx.circle(point(300.0, 200.0), 48.0);
-    ctx.color(Color::from_rgba(1.0, 1.0, 1.0, 1.0));
+    ctx.gradient_x(
+        Color::from_rgba(1.0, 0.0, 0.0, 1.0),
+        Color::from_rgba(1.0, 1.0, 0.0, 1.0)
+    );
     ctx.stroke_width(10.0);
     ctx.stroke();
-    */
 
     ctx.begin_primitive();
     ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 20.0);
@@ -753,30 +709,10 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     );
     ctx.fill();
 
+    /*
+    ctx.begin_primitive();
+    ctx.text(point(400.0, 400.0), String::from("Ciaone"));
+    */
+
     ctx.end_mesh()
-}
-
-pub fn draw_primitives(gl: gl::Gl, program: &mut Program, primitives: &Vec<Primitive>) {
-    let start_time = std::time::Instant::now();
-
-    let mut tris_offset = 0;
-
-    for primitive in primitives {
-        unsafe {
-            program.set_vec4("bbox", &primitive.bbox);
-            program.set_gradient(&primitive.gradient);
-
-            gl.DrawElements(
-                gl::TRIANGLES,
-                primitive.num_vertices as i32,
-                gl::UNSIGNED_INT,
-                (tris_offset * std::mem::size_of::<gl::types::GLuint>())
-                    as *const std::ffi::c_void
-            );
-        }
-
-        tris_offset += primitive.num_vertices as usize;
-    }
-
-    //println!("Frame render: {}", start_time.elapsed().as_micros());
 }

@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 cgmath = "0.17.0"
 lyon = { path = "../../../lyon" }
+glyph_brush = "0.5.3"
 gl = { path = "../gl" }
 glutin = "0.22.0-alpha1"
 
