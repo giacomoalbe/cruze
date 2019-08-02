@@ -220,6 +220,8 @@ impl Rectangle {
 
 #[derive(Debug)]
 pub struct Gradient {
+    pub radius: f32,
+    pub gradient_type: u32,
     pub start_pos: Vector,
     pub end_pos: Vector,
     pub first_color: Color,
@@ -229,6 +231,8 @@ pub struct Gradient {
 impl Gradient {
     pub fn new() -> Gradient {
         Gradient {
+            radius: 0.0,
+            gradient_type: 0,
             start_pos: vector(0.5, 0.0),
             end_pos: vector(0.5, 1.0),
             first_color: Color::from_rgb(0.0, 0.0, 0.0),
@@ -237,6 +241,8 @@ impl Gradient {
     }
 
     pub fn from_values(
+        radius: f32,
+        gradient_type: u32,
         start_pos: Vector,
         end_pos: Vector,
         first_color: Color,
@@ -244,6 +250,8 @@ impl Gradient {
     -> Gradient
     {
         Gradient {
+            radius,
+            gradient_type,
             start_pos,
             end_pos,
             first_color,
@@ -314,6 +322,7 @@ enum CtxDirection {
     CW,
     GradientX,
     GradientY,
+    GradientRadial(Vector, f32),
 }
 
 struct Ctx {
@@ -382,6 +391,8 @@ impl Ctx {
                     match gradient_type {
                         CtxDirection::GradientY => {
                             current_primitive.gradient = Gradient {
+                                radius: 0.0,
+                                gradient_type: 0,
                                 start_pos: vector(0.5, 1.0),
                                 end_pos: vector(0.5, 0.0),
                                 first_color: *f_c,
@@ -390,12 +401,24 @@ impl Ctx {
                         },
                         CtxDirection::GradientX => {
                             current_primitive.gradient = Gradient {
+                                radius: 0.0,
+                                gradient_type: 0,
                                 start_pos: vector(1.0, 0.5),
                                 end_pos: vector(0.0, 0.5),
                                 first_color: *f_c,
                                 last_color: *l_c
                             };
                         },
+                        CtxDirection::GradientRadial(c, r) => {
+                            current_primitive.gradient = Gradient {
+                                gradient_type: 1,
+                                start_pos: *c,
+                                end_pos: vector(0.0, 0.0),
+                                radius: *r,
+                                first_color: *f_c,
+                                last_color: *l_c
+                            };
+                        }
                         _ => ()
                     }
                 },
@@ -601,6 +624,14 @@ impl Ctx {
         ));
     }
 
+    fn gradient_radial(&mut self, first_color: Color, last_color: Color, center: Vector, radius: f32) {
+        self.commands.push(CtxCommand::Gradient(
+            CtxDirection::GradientRadial(center, radius),
+            first_color,
+            last_color,
+        ));
+    }
+
     fn stroke_width(&mut self, width: f32) {
         self.commands.push(CtxCommand::StrokeWidth(width));
     }
@@ -694,20 +725,33 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     */
 
     ctx.begin_primitive();
-    ctx.circle(point(400.0, 300.0), 300.0);
+    ctx.circle(point(400.0, 300.0), 100.0);
     //ctx.circle(point(300.0, 200.0), 48.0);
-    ctx.gradient_y(
+    ctx.gradient_radial(
         Color::from_rgba(1.0, 0.0, 0.0, 1.0),
         Color::from_rgba(0.0, 0.0, 0.0, 0.0),
+        vector(400.0, 300.0),
+        50.0,
     );
     ctx.fill();
 
+    /*
     ctx.begin_primitive();
-    ctx.circle(point(400.0, 300.0), 300.0);
+    ctx.circle(point(400.0, 300.0), 30.0);
     //ctx.circle(point(300.0, 200.0), 48.0);
     ctx.color(Color::from_rgba(1.0, 1.0, 1.0, 1.0));
     ctx.stroke_width(10.0);
     ctx.stroke();
+    */
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 20.0);
+    ctx.round_rect(point(200.0, 200.0), 70.0, 70.0, 20.0);
+    ctx.gradient_y(
+        Color::from_rgba(0.8, 0.4, 0.6, 1.0),
+        Color::from_rgba(0.8, 0.4, 0.6, 0.0),
+    );
+    ctx.fill();
 
     ctx.end_mesh()
 }

@@ -3,6 +3,8 @@
 layout (location = 0) in vec3 Position;
 
 out VS_OUPUT {
+  flat uint gradient_type;
+  float radius;
   vec4 first_color;
   vec4 last_color;
   vec2 start_pos;
@@ -18,6 +20,8 @@ uniform vec4 last_color;
 uniform vec2 start_pos;
 uniform vec2 end_pos;
 uniform vec4 bbox;
+uniform uint gradient_type;
+uniform float radius;
 
 void main() {
   gl_Position = projection * model * vec4(Position.xyz, 1.0);
@@ -29,4 +33,7 @@ void main() {
   OUT.end_pos = end_pos;
 
   OUT.bbox = bbox;
+
+  OUT.gradient_type = gradient_type;
+  OUT.radius = radius;
 }

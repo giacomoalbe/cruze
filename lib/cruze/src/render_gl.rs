@@ -389,6 +389,20 @@ impl Program {
             1,
             end_pos.as_ptr()
         );
+
+        let name = CString::new("gradient_type").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform1ui(
+            uniform_location,
+            gradient.gradient_type as gl::types::GLuint
+        );
+
+        let name = CString::new("radius").unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+        self.gl.Uniform1f(
+            uniform_location,
+            gradient.radius as gl::types::GLfloat
+        );
     }
 }
 

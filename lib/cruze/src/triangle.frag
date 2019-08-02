@@ -1,6 +1,11 @@
 #version 330 core
 
+const uint LINEAR = uint(0);
+const uint RADIAL = uint(1);
+
 in VS_OUPUT {
+  flat uint gradient_type;
+  float radius;
   vec4 first_color;
   vec4 last_color;
   vec2 start_pos;
@@ -21,18 +26,21 @@ void main() {
   float x = (gl_FragCoord.x - IN.bbox.a) / (IN.bbox.g - IN.bbox.a);
   float y = (gl_FragCoord.y - IN.bbox.b) / (IN.bbox.r - IN.bbox.b);
 
-  vec4 first_color = IN.first_color;
-  vec4 last_color = IN.last_color;
+  float factor = 0.0;
 
-  vec2 start_pos = IN.start_pos;
-  vec2 end_pos = IN.end_pos;
+  if (IN.gradient_type == LINEAR) {
+    vec2 relative_position = vec2(x,y) - IN.start_pos;
 
-  vec2 relative_position = vec2(x,y) - start_pos;
+    vec2 gradient_direction = IN.end_pos - IN.start_pos;
 
-  vec2 gradient_direction = end_pos - start_pos;
+    factor = dot(relative_position, gradient_direction) /
+             dot(gradient_direction, gradient_direction);
+  } else {
+      // start_pos is the center
+      vec2 relative_position = gl_FragCoord.xy - IN.start_pos;
 
-  float factor = dot(relative_position, gradient_direction) /
-                 dot(gradient_direction, gradient_direction);
+      factor = length(relative_position) / IN.radius;
+  }
 
-  Color = mix(first_color, last_color, factor);
+  Color = mix(IN.first_color, IN.last_color, factor);
 }
