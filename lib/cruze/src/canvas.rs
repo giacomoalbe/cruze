@@ -54,24 +54,30 @@ pub struct Color {
     r: f32,
     g: f32,
     b: f32,
+    a: f32,
 }
 
 impl Color {
-    pub fn new(r: f32, g: f32, b: f32) -> Color {
+    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color {
             r,
             g,
-            b
+            b,
+            a
         }
     }
 
-    pub fn to_vec3(&self) -> cgmath::Vector3<f32> {
-        cgmath::Vector3::new(self.r, self.g, self.b)
+    pub fn to_vec(&self) -> cgmath::Vector4<f32> {
+        cgmath::Vector4::new(self.r, self.g, self.b, self.a)
     }
-}
 
-fn color(r: f32, g: f32, b: f32) -> Color {
-    Color::new(r,g,b)
+    pub fn from_rgb(r: f32, g: f32, b: f32) -> Color {
+        Color::new(r, g, b, 1.0)
+    }
+
+    pub fn from_rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
+        Color::new(r, g, b, a)
+    }
 }
 
 #[derive(Debug)]
@@ -86,20 +92,6 @@ impl<T> Size<T> {
             width,
             height
         }
-    }
-}
-
-pub struct Screen {
-}
-
-impl Screen {
-    pub fn new() -> Screen {
-        Screen {
-        }
-    }
-
-    pub fn draw(&self) {
-        println!("Just drawing...");
     }
 }
 
@@ -239,8 +231,8 @@ impl Gradient {
         Gradient {
             start_pos: vector(0.5, 0.0),
             end_pos: vector(0.5, 1.0),
-            first_color: color(0.0, 0.0, 0.0),
-            last_color: color(0.0, 0.0, 0.0),
+            first_color: Color::from_rgb(0.0, 0.0, 0.0),
+            last_color: Color::from_rgb(0.0, 0.0, 0.0),
         }
     }
 
@@ -390,8 +382,8 @@ impl Ctx {
                     match gradient_type {
                         CtxDirection::GradientY => {
                             current_primitive.gradient = Gradient {
-                                start_pos: vector(0.5, 0.0),
-                                end_pos: vector(0.5, 1.0),
+                                start_pos: vector(0.5, 1.0),
+                                end_pos: vector(0.5, 0.0),
                                 first_color: *f_c,
                                 last_color: *l_c
                             };
@@ -702,16 +694,20 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     */
 
     ctx.begin_primitive();
-    ctx.circle(point(300.0, 200.0), 50.0);
-    ctx.circle(point(300.0, 200.0), 48.0);
-    ctx.gradient_y(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
+    ctx.circle(point(400.0, 300.0), 300.0);
+    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.gradient_y(
+        Color::from_rgba(1.0, 0.0, 0.0, 1.0),
+        Color::from_rgba(0.0, 0.0, 0.0, 0.0),
+    );
     ctx.fill();
 
     ctx.begin_primitive();
-    ctx.circle(point(500.0, 200.0), 50.0);
-    ctx.circle(point(500.0, 200.0), 40.0);
-    ctx.gradient_x(color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0));
-    ctx.fill();
+    ctx.circle(point(400.0, 300.0), 300.0);
+    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.color(Color::from_rgba(1.0, 1.0, 1.0, 1.0));
+    ctx.stroke_width(10.0);
+    ctx.stroke();
 
     ctx.end_mesh()
 }

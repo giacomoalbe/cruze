@@ -3,8 +3,8 @@
 layout (location = 0) in vec3 Position;
 
 out VS_OUPUT {
-  vec3 first_color;
-  vec3 last_color;
+  vec4 first_color;
+  vec4 last_color;
   vec2 start_pos;
   vec2 end_pos;
   vec4 bbox;
@@ -13,8 +13,8 @@ out VS_OUPUT {
 uniform mat4 projection;
 uniform mat4 model;
 
-uniform vec3 first_color;
-uniform vec3 last_color;
+uniform vec4 first_color;
+uniform vec4 last_color;
 uniform vec2 start_pos;
 uniform vec2 end_pos;
 uniform vec4 bbox;

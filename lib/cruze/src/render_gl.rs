@@ -50,6 +50,13 @@ impl Renderer {
             vao: 0,
         };
 
+        // Enable blending
+        unsafe {
+            gl.Enable(gl::BLEND);
+            gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            gl.Enable(gl::MULTISAMPLE);
+        }
+
         renderer.bind_vertex_arrays();
 
         renderer
@@ -273,7 +280,6 @@ impl Program {
                 gl.GetProgramiv(program_id, gl::LINK_STATUS, &mut success);
             }
 
-
             if success == 0 {
                 // ERROR in Program Link
                 // get error buffer length
@@ -346,18 +352,18 @@ impl Program {
     pub unsafe fn set_gradient(&self, gradient: &canvas::Gradient) {
         let name = CString::new("first_color").unwrap();
         let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
-        self.gl.Uniform3fv(
+        self.gl.Uniform4fv(
             uniform_location,
             1,
-            gradient.first_color.to_vec3().as_ptr()
+            gradient.first_color.to_vec().as_ptr()
         );
 
         let name = CString::new("last_color").unwrap();
         let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
-        self.gl.Uniform3fv(
+        self.gl.Uniform4fv(
             uniform_location,
             1,
-            gradient.last_color.to_vec3().as_ptr()
+            gradient.last_color.to_vec().as_ptr()
         );
 
         let name = CString::new("start_pos").unwrap();

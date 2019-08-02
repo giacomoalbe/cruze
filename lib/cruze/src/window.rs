@@ -36,6 +36,8 @@ impl Window {
             });
 
         let context = ContextBuilder::new()
+            .with_multisampling(8)
+            .with_vsync(true)
             .build_windowed(wb, &app.el)
             .unwrap();
 

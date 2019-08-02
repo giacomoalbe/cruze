@@ -1,8 +1,8 @@
 #version 330 core
 
 in VS_OUPUT {
-  vec3 first_color;
-  vec3 last_color;
+  vec4 first_color;
+  vec4 last_color;
   vec2 start_pos;
   vec2 end_pos;
   vec4 bbox;
@@ -21,8 +21,8 @@ void main() {
   float x = (gl_FragCoord.x - IN.bbox.a) / (IN.bbox.g - IN.bbox.a);
   float y = (gl_FragCoord.y - IN.bbox.b) / (IN.bbox.r - IN.bbox.b);
 
-  vec4 first_color = vec4(IN.first_color, 1.0);
-  vec4 last_color = vec4(IN.last_color, 1.0);
+  vec4 first_color = IN.first_color;
+  vec4 last_color = IN.last_color;
 
   vec2 start_pos = IN.start_pos;
   vec2 end_pos = IN.end_pos;
