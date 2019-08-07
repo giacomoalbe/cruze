@@ -263,9 +263,17 @@ impl Gradient {
 }
 
 #[derive(Debug)]
+pub enum PrimitiveType {
+    Text,
+    Path,
+}
+
+#[derive(Debug)]
 pub struct Primitive {
+    pub kind: PrimitiveType,
     pub gradient: Gradient,
     pub num_vertices: u32,
+    pub text: String,
     pub stroke_width: f32,
     pub bbox: cgmath::Vector4<f32>,
 }
@@ -273,6 +281,8 @@ pub struct Primitive {
 impl Primitive {
     pub fn new() -> Primitive {
         Primitive {
+            kind: PrimitiveType::Path,
+            text: String::new(),
             gradient: Gradient::new(),
             stroke_width: 0.0,
             num_vertices: 0,
@@ -433,7 +443,8 @@ impl Ctx {
                     builder.arc(*c, *r, *s, *x);
                 },
                 CtxCommand::Text(c, t) => {
-                    println!("Text: {}", *t);
+                    current_primitive.kind = PrimitiveType::Text;
+                    current_primitive.text = String::from(t);
                 },
                 CtxCommand::Close => builder.close(),
             };
@@ -673,6 +684,7 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
 
     ctx.begin_mesh();
 
+    /*
     ctx.begin_primitive();
     ctx.circle(point(400.0, 300.0), 100.0);
     //ctx.circle(point(300.0, 200.0), 48.0);
@@ -708,11 +720,20 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
         Color::from_rgba(0.8, 0.4, 0.6, 0.0),
     );
     ctx.fill();
-
-    /*
-    ctx.begin_primitive();
-    ctx.text(point(400.0, 400.0), String::from("Ciaone"));
     */
+
+    ctx.begin_primitive();
+    ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 20.0);
+    ctx.round_rect(point(200.0, 200.0), 70.0, 70.0, 20.0);
+    ctx.gradient_y(
+        Color::from_rgba(0.8, 0.4, 0.6, 1.0),
+        Color::from_rgba(0.8, 0.4, 0.6, 0.0),
+    );
+    ctx.fill();
+
+    ctx.begin_primitive();
+    ctx.color(Color::from_rgba(1.0, 1.0, 0.6, 1.0));
+    ctx.text(point(400.0, 400.0), String::from("Ciaone Culone"));
 
     ctx.end_mesh()
 }

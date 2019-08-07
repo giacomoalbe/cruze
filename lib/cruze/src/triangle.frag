@@ -3,6 +3,8 @@
 const uint LINEAR = uint(0);
 const uint RADIAL = uint(1);
 
+uniform sampler2D font_tex;
+
 in VS_OUPUT {
   flat uint gradient_type;
   float radius;
@@ -11,6 +13,8 @@ in VS_OUPUT {
   vec2 start_pos;
   vec2 end_pos;
   vec4 bbox;
+  vec2 f_tex_pos;
+  flat int is_textured;
 } IN;
 
 out vec4 Color;
@@ -22,6 +26,7 @@ void main() {
    * BOTTOM = b
    * LEFT = a
    */
+  float alpha = texture(font_tex, IN.f_tex_pos).r;
 
   float x = (gl_FragCoord.x - IN.bbox.a) / (IN.bbox.g - IN.bbox.a);
   float y = (gl_FragCoord.y - IN.bbox.b) / (IN.bbox.r - IN.bbox.b);
@@ -42,5 +47,9 @@ void main() {
       factor = length(relative_position) / IN.radius;
   }
 
-  Color = mix(IN.first_color, IN.last_color, factor);
+  Color = mix(IN.first_color, IN.last_color, clamp(factor, 0, 1));
+
+  if (IN.is_textured == 1) {
+    Color.a = clamp(alpha, 0.3, 1);
+  }
 }
