@@ -6,7 +6,6 @@ use lyon::math::{
     vector,
     Vector,
     Angle,
-    rect
 };
 
 use lyon::path::{
@@ -27,14 +26,6 @@ use lyon::tessellation::{
     StrokeOptions,
     StrokeTessellator,
 };
-
-use lyon::path::builder::*;
-
-
-use std::ffi::{CStr};
-
-use cgmath::prelude::*;
-use super::render_gl::Program;
 
 #[derive(Debug)]
 pub struct Point2<T> {
@@ -273,6 +264,7 @@ pub struct Primitive {
     pub kind: PrimitiveType,
     pub gradient: Gradient,
     pub num_vertices: u32,
+    pub font: String,
     pub text: String,
     pub stroke_width: f32,
     pub bbox: cgmath::Vector4<f32>,
@@ -281,6 +273,7 @@ pub struct Primitive {
 impl Primitive {
     pub fn new() -> Primitive {
         Primitive {
+            font: String::from("dejavu"),
             kind: PrimitiveType::Path,
             text: String::new(),
             gradient: Gradient::new(),
@@ -344,6 +337,7 @@ struct Ctx {
     stroke_tess: StrokeTessellator,
     mesh: VertexBuffers<CtxVertex, u32>,
     primitives: Vec<Primitive>,
+    fonts: Vec<String>,
     prim_id: usize,
     path_direction: CtxDirection,
     gradient_direction: CtxDirection,
@@ -357,6 +351,7 @@ impl Ctx {
             stroke_tess: StrokeTessellator::new(),
             mesh: VertexBuffers::new(),
             primitives: vec![],
+            fonts: vec![],
             gradient_direction: CtxDirection::GradientY,
             path_direction: CtxDirection::CW,
             prim_id: 0,
@@ -367,7 +362,7 @@ impl Ctx {
     fn begin_mesh(&mut self) {
     }
 
-    fn end_mesh(self) -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
+    fn end_mesh(self) -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
         let mut vertices: Vec<f32> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
 
@@ -383,7 +378,7 @@ impl Ctx {
             .map(|index| *index as u32)
             .collect();
 
-        (vertices, indices, self.primitives)
+        (vertices, indices, self.primitives, self.fonts)
     }
 
     fn begin_primitive(&mut self) {
@@ -443,6 +438,7 @@ impl Ctx {
                     builder.arc(*c, *r, *s, *x);
                 },
                 CtxCommand::Text(c, t) => {
+                    current_primitive.font = "dejavu".to_string();
                     current_primitive.kind = PrimitiveType::Text;
                     current_primitive.text = String::from(t);
                 },
@@ -452,7 +448,7 @@ impl Ctx {
 
         let path = builder.build();
 
-        let bbox =  lyon::algorithms::aabb::fast_bounding_rect(path.iter());
+        let bbox = lyon::algorithms::aabb::fast_bounding_rect(path.iter());
 
         // BBox is TOP, RIGHT, BOTTOM, LEFT coordinates
         // of the current path bounding box, calculated from
@@ -463,6 +459,8 @@ impl Ctx {
             bbox.center().y - bbox.size.height / 2.0,
             bbox.center().x - bbox.size.width / 2.0,
         );
+
+        self.fonts.push(current_primitive.font.clone());
 
         (path, current_primitive)
     }
@@ -679,7 +677,7 @@ impl Ctx {
     }
 }
 
-pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
+pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
     let mut ctx = Ctx::new();
 
     ctx.begin_mesh();
@@ -732,8 +730,13 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>) {
     ctx.fill();
 
     ctx.begin_primitive();
-    ctx.color(Color::from_rgba(1.0, 1.0, 0.6, 1.0));
-    ctx.text(point(400.0, 400.0), String::from("Ciaone Culone"));
+    ctx.gradient_y(
+        Color::from_rgb(0.5, 0.4, 0.8),
+        Color::from_rgb(0.9, 0.1, 0.2),
+    );
+    ctx.text(point(400.0, 400.0), String::from(
+        "Harry Porcher"
+    ));
 
     ctx.end_mesh()
 }

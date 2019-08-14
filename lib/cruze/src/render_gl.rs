@@ -1,29 +1,31 @@
+extern crate rusttype;
+extern crate image;
+
 use gl;
 use super::canvas;
 
 use std;
+use std::path::Path;
 use std::ffi::{
     CString,
     CStr
 };
+use std::collections::HashMap;
 
 use cgmath::{
     Matrix,
     Matrix4,
-    Vector4
 };
 
 use cgmath::prelude::*;
 
-use glutin::event::VirtualKeyCode;
-
-use glyph_brush::{
-    *,
-    rusttype::*,
-    BrushAction,
-    BrushError,
-    GlyphBrushBuilder,
-    Section,
+use rusttype::{
+    gpu_cache::Cache,
+    Font,
+    Scale,
+    point,
+    Rect,
+    PositionedGlyph,
 };
 
 type Vertex = [gl::types::GLfloat; 9];
@@ -41,6 +43,7 @@ impl GlGlyphTexture {
             // The texture holds 1 byte per pixel as alpha data
             let gl = gl.clone();
 
+            gl.ActiveTexture(gl::TEXTURE0);
             gl.PixelStorei(gl::UNPACK_ALIGNMENT, 1);
             gl.GenTextures(1, &mut name);
             gl.BindTexture(gl::TEXTURE_2D, name);
@@ -71,8 +74,34 @@ impl GlGlyphTexture {
 impl Drop for GlGlyphTexture {
     fn drop(&mut self) {
         unsafe {
+            println!("Dropping font texture");
             self.gl.DeleteTextures(1, &self.name);
         }
+    }
+}
+
+pub struct FontCache {
+    pub cache: Cache<'static>,
+    pub font: Font<'static>,
+}
+
+fn print_data(data: Vec<u8>, rect: &Rect<i32>) {
+    println!("Len: {}", data.len());
+    println!("Rect: {} x {}", rect.width(), rect.height());
+
+    for i in 0..rect.height() {
+        for j in 0..rect.width() {
+            let val = data.get((i * rect.width() + j) as usize).unwrap();
+
+            let val_str = if *val > 0 {
+                "1"
+            } else {
+                "0"
+            };
+
+            print!("{}", val_str);
+        }
+        println!("");
     }
 }
 
@@ -85,6 +114,7 @@ pub struct Renderer {
     projection: Matrix4<f32>,
     model: Matrix4<f32>,
     texture: GlGlyphTexture,
+    font_caches: HashMap<String, FontCache>,
     vao: gl::types::GLuint,
     pbo: gl::types::GLuint,
     tbo: gl::types::GLuint,
@@ -93,6 +123,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(gl: &gl::Gl) -> Renderer {
+        // TODO Remove CString boilerplate, put
+        // in shader
         let vert_shader = Shader::from_vert_source(
             &gl,
             &CString::new(include_str!("triangle.vert")).unwrap()
@@ -111,7 +143,7 @@ impl Renderer {
             .unwrap();
 
         let mut renderer = Renderer {
-            texture: GlGlyphTexture::new(gl.clone(), (256, 256)),
+            texture: GlGlyphTexture::new(gl.clone(), (512, 512)),
             projection: Matrix4::identity(),
             model: Matrix4::identity(),
             gl: gl.clone(),
@@ -119,6 +151,7 @@ impl Renderer {
             indices: vec![],
             primitives: vec![],
             program: program,
+            font_caches: HashMap::new(),
             vao: 0,
             pbo: 0,
             tbo: 0,
@@ -134,11 +167,11 @@ impl Renderer {
 
         renderer.generate_geometry_primitives();
         renderer.bind_vertex_arrays();
-        renderer.bind_glyph_renderer();
 
         renderer
     }
 
+    /*
     fn bind_glyph_renderer(&self) {
         let gl = self.gl.clone();
 
@@ -155,8 +188,6 @@ impl Renderer {
                 ("tex_right_bottom", 2)
             ] {
                 let attr = self.program.getAttribLocation(v_field);
-
-                println!("{} GetAttribLocation -> {}", v_field, attr);
 
                 gl.EnableVertexAttribArray(attr as _);
                 gl.VertexAttribPointer(
@@ -178,13 +209,33 @@ impl Renderer {
             gl.BindVertexArray(0);
         };
     }
+    */
 
     fn generate_geometry_primitives(&mut self) {
-        let (vertices, indices, primitives) = canvas::generate_mesh();
+        let (vertices, indices, primitives, fonts) = canvas::generate_mesh();
 
         self.indices = indices;
         self.vertices = vertices;
         self.primitives = primitives;
+
+        // TODO: get dpi factor from gl context
+        let dpi_factor = 1.0;
+
+        let (cache_width, cache_height) = (
+            (512.0 * dpi_factor) as u32,
+            (512.0 * dpi_factor) as u32
+        );
+
+        for font in &fonts {
+            let font_data = include_bytes!("../fonts/DejaVuSans.ttf");
+
+            self.font_caches.insert(font.to_string(), FontCache {
+                cache: Cache::builder()
+                    .dimensions(cache_width, cache_height)
+                    .build(),
+                font: Font::from_bytes(font_data as &[u8]).unwrap()
+            });
+        }
     }
 
     fn bind_vertex_arrays(&mut self) {
@@ -265,8 +316,220 @@ impl Renderer {
         }
     }
 
+    fn layout_text<'a>(&self, primitive: &canvas::Primitive)
+        -> (Vec<PositionedGlyph<'a>>, rusttype::Rect<i32>) {
+        let scale = Scale::uniform(50.0);
+
+        let font = &self.font_caches
+            .get(&primitive.font)
+            .unwrap()
+            .font;
+
+        let v_metrics = font.v_metrics(scale);
+        let advance_height =
+            v_metrics.ascent -
+            v_metrics.descent +
+            v_metrics.line_gap;
+
+        let mut caret = point(0.0, v_metrics.ascent);
+        let mut last_glyph_id = None;
+
+        let mut result = vec![];
+
+        let mut min_x: i32 = 10000;
+        let mut max_x: i32 = 0;
+        let mut min_y: i32 = 10000;
+        let mut max_y: i32 = 0;
+
+        for c in primitive.text.chars() {
+            let base_glyph = font.glyph(c);
+
+            if let Some(id) = last_glyph_id.take() {
+                caret.x += font.pair_kerning(scale, id, base_glyph.id());
+            }
+
+            last_glyph_id = Some(base_glyph.id());
+
+            let mut glyph = base_glyph
+                .scaled(scale)
+                .positioned(caret);
+
+            let advance = glyph.unpositioned().h_metrics().advance_width;
+
+            if let Some(bb) = glyph.pixel_bounding_box() {
+                min_x = min_x.min(bb.min.x);
+                max_x = max_x.max(bb.max.x);
+                min_y = min_y.min(bb.min.y);
+                max_y = max_y.max(bb.max.y);
+            }
+
+            caret.x += advance;
+
+            result.push(glyph);
+        }
+
+        let bbox = Rect {
+            min: point(min_x, min_y),
+            max: point(max_x, max_y),
+        };
+
+        (result, bbox)
+    }
+
+    fn queue_glyphs(
+        &self,
+        primitive: &canvas::Primitive,
+        glyphs: &Vec<PositionedGlyph<'static>>,
+        bbox: rusttype::Rect<i32>,
+    ) {
+        // Get the cached instance on self
+        // not create a new one each time
+        // TODO: get dpi factor from gl context
+        let dpi_factor = 1.0;
+
+        let (cache_width, cache_height) = (
+            (512.0 * dpi_factor) as u32,
+            (512.0 * dpi_factor) as u32
+        );
+
+        let mut glyph_cache = Cache::builder()
+            .dimensions(cache_width, cache_height)
+            .build();
+
+        for glyph in glyphs {
+            glyph_cache.queue_glyph(0, glyph.clone());
+        }
+
+        glyph_cache.cache_queued(|rect, data| {
+            //println!("Rect area: {}", rect.width() * rect.height());
+            //println!("Data len: {}", data.len());
+            //print_data(&data, &rect);
+
+            unsafe {
+                self.gl.BindTexture(gl::TEXTURE_2D, self.texture.name);
+                self.gl.TexSubImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    rect.min.x as _,
+                    rect.min.y as _,
+                    rect.width() as _,
+                    rect.height() as _,
+                    gl::RED,
+                    gl::UNSIGNED_BYTE,
+                    data.as_ptr() as _,
+                );
+            }
+        }).expect("FontCache is too big");
+
+        let texture_data: [u8; 512 * 512] = [0; 512 * 512];
+
+        let mut vertices: Vec<f32> = Vec::new();
+
+        for glyph in glyphs {
+            if let Ok(Some((uv_rect, s_rect))) = glyph_cache.rect_for(0, glyph) {
+                let bbox_height = bbox.height() + bbox.min.y;
+                let glyph_height = s_rect.height();
+
+                let glyph_bbox = Rect {
+                    min: point(
+                        s_rect.min.x,
+                        bbox_height - s_rect.max.y
+                    ),
+                    max: point(
+                        s_rect.max.x,
+                        bbox_height - s_rect.min.y
+                    ),
+                };
+
+                // TL
+                vertices.push(glyph_bbox.min.x as f32);
+                vertices.push(glyph_bbox.max.y as f32);
+                vertices.push(1.0);
+                vertices.push(uv_rect.min.x as f32);
+                vertices.push(uv_rect.min.y as f32);
+
+                // TR
+                vertices.push(glyph_bbox.max.x as f32);
+                vertices.push(glyph_bbox.max.y as f32);
+                vertices.push(1.0);
+                vertices.push(uv_rect.max.x as f32);
+                vertices.push(uv_rect.min.y as f32);
+
+                // BL
+                vertices.push(glyph_bbox.min.x as f32);
+                vertices.push(glyph_bbox.min.y as f32);
+                vertices.push(1.0);
+                vertices.push(uv_rect.min.x as f32);
+                vertices.push(uv_rect.max.y as f32);
+
+                // BR
+                vertices.push(glyph_bbox.max.x as f32);
+                vertices.push(glyph_bbox.min.y as f32);
+                vertices.push(1.0);
+                vertices.push(uv_rect.max.x as f32);
+                vertices.push(uv_rect.max.y as f32);
+            }
+        }
+
+        let gl = self.gl.clone();
+
+        unsafe {
+            gl.BindVertexArray(self.vao);
+            gl.BindBuffer(gl::ARRAY_BUFFER, self.tbo);
+            gl.BufferData(
+                gl::ARRAY_BUFFER,
+                (vertices.len() * std::mem::size_of::<gl::types::GLfloat>()) as gl::types::GLsizeiptr,
+                vertices.as_ptr() as *const gl::types::GLvoid,
+                gl::STATIC_DRAW
+            );
+
+            // Enable location "Position (0)" in Vertex Shader
+            // This must be done AFTER buffers have been
+            // filled with data
+            gl.EnableVertexAttribArray(0);
+            gl.EnableVertexAttribArray(1);
+
+            gl.VertexAttribPointer(
+                0,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                std::ptr::null()
+            );
+
+            gl.VertexAttribPointer(
+                1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                (3 * std::mem::size_of::<gl::types::GLfloat>()) as _,
+            );
+
+            //println!("Glyphs length: {}", glyphs.len());
+            //println!("Vertices length: {}", vertices.len());
+            //println!("Vertices {:#?}", vertices);
+            let vec4_bbox = cgmath::Vector4::new(
+                bbox.max.y as f32,
+                bbox.max.x as f32,
+                bbox.min.y as f32,
+                bbox.min.x as f32,
+            );
+
+            self.program.set_texture("font_tex", self.texture.name);
+            self.program.set_vec4("bbox", &vec4_bbox);
+
+            for (index, glyph) in glyphs.iter().enumerate() {
+                let offset = (index*4) as i32;
+
+                gl.DrawArrays(gl::TRIANGLE_STRIP, offset, 4);
+            }
+        }
+    }
+
     pub fn draw_primitives(&mut self) {
-        let start_time = std::time::Instant::now();
+        let _start_time = std::time::Instant::now();
 
         let gl = self.gl.clone();
 
@@ -276,22 +539,28 @@ impl Renderer {
             unsafe {
                 self.program.set_vec4("bbox", &primitive.bbox);
                 self.program.set_gradient(&primitive.gradient);
-
                 self.program.get_bool("is_textured");
 
                 match primitive.kind {
                     canvas::PrimitiveType::Path => {
                         self.program.set_bool("is_textured", false);
 
+                        gl.BindVertexArray(self.vao);
                         gl.BindBuffer(gl::ARRAY_BUFFER, self.pbo);
                         gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
 
+                        // Disable only TexCoord;
+                        gl.DisableVertexAttribArray(1);
                         gl.EnableVertexAttribArray(0);
 
-                        gl.DisableVertexAttribArray(1);
-                        gl.DisableVertexAttribArray(2);
-                        gl.DisableVertexAttribArray(3);
-                        gl.DisableVertexAttribArray(4);
+                        gl.VertexAttribPointer(
+                            0,
+                            3,
+                            gl::FLOAT,
+                            gl::FALSE,
+                            (3 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                            std::ptr::null()
+                        );
 
                         gl.DrawElements(
                             gl::TRIANGLES,
@@ -306,158 +575,17 @@ impl Renderer {
                     canvas::PrimitiveType::Text => {
                         self.program.set_bool("is_textured", true);
 
-                        println!("Gradient:  {:?}", primitive.gradient);
+                        // Layout text with info from primitive
+                        let (glyphs, metrics) = self.layout_text(&primitive);
 
-                        let dejavu: &[u8] = include_bytes!("../fonts/DejaVuSans.ttf");
+                        // Update texture position
+                        self.queue_glyphs(&primitive, &glyphs, metrics);
 
-                        let mut glyph_brush = GlyphBrushBuilder
-                            ::using_font_bytes(dejavu)
-                            .build();
+                        // Load glyph position to TBO
 
-                        glyph_brush.queue(Section {
-                            text: &primitive.text,
-                            screen_position: (400.0, 400.0),
-                            scale: Scale::uniform(70.0),
-                            layout: Layout::default()
-                                .h_align(HorizontalAlign::Center)
-                                .v_align(VerticalAlign::Center),
-                            ..Section::default()
-                        });
-
-                        let mut vertex_count = 0;
-                        let mut vertex_max = vertex_count;
-                        let mut min_x: f32 = 1e6;
-
-                        match glyph_brush.process_queued(
-                            |rect, tex_data| unsafe {
-                                // Update part of gpu texture with new glyph alpha values
-                                // Run this for every character in the text
-                                self.gl.BindTexture(gl::TEXTURE_2D, self.texture.name);
-                                self.gl.TexSubImage2D(
-                                    gl::TEXTURE_2D,
-                                    0,
-                                    rect.min.x as _,
-                                    rect.min.y as _,
-                                    rect.width() as _,
-                                    rect.height() as _,
-                                    gl::RED,
-                                    gl::UNSIGNED_BYTE,
-                                    tex_data.as_ptr() as _,
-                                );
-                            },
-                            |vertex_data| {
-                                // Window coordinates
-                                let glyph_brush::GlyphVertex {
-                                    mut tex_coords,
-                                    pixel_coords,
-                                    bounds,
-                                    color,
-                                    z,
-                                } = vertex_data;
-
-                                let gl_bounds = bounds;
-
-                                let mut gl_rect = glyph_brush::rusttype::Rect {
-                                    min: glyph_brush::rusttype::point(pixel_coords.min.x as f32, pixel_coords.min.y as f32),
-                                    max: glyph_brush::rusttype::point(pixel_coords.max.x as f32, pixel_coords.max.y as f32),
-                                };
-
-                                // handle overlapping bounds, modify uv_rect to preserve texture aspect
-                                if gl_rect.max.x > gl_bounds.max.x {
-                                    let old_width = gl_rect.width();
-                                    gl_rect.max.x = gl_bounds.max.x;
-                                    tex_coords.max.x = tex_coords.min.x + tex_coords.width() * gl_rect.width() / old_width;
-                                }
-                                if gl_rect.min.x < gl_bounds.min.x {
-                                    let old_width = gl_rect.width();
-                                    gl_rect.min.x = gl_bounds.min.x;
-                                    tex_coords.min.x = tex_coords.max.x - tex_coords.width() * gl_rect.width() / old_width;
-                                }
-                                if gl_rect.max.y > gl_bounds.max.y {
-                                    let old_height = gl_rect.height();
-                                    gl_rect.max.y = gl_bounds.max.y;
-                                    tex_coords.max.y = tex_coords.min.y + tex_coords.height() * gl_rect.height() / old_height;
-                                }
-                                if gl_rect.min.y < gl_bounds.min.y {
-                                    let old_height = gl_rect.height();
-                                    gl_rect.min.y = gl_bounds.min.y;
-                                    tex_coords.min.y = tex_coords.max.y - tex_coords.height() * gl_rect.height() / old_height;
-                                }
-
-                                println!("Pixel Coord: {:?}", pixel_coords);
-                                println!("GL_RECT w: {} h: {}", gl_rect.width(), gl_rect.height());
-                                println!("Tex coords: {:?}", tex_coords);
-
-                                println!("Min x: {}, gl_rect.min.x: {}", min_x, gl_rect.min.x);
-                                if gl_rect.min.x < min_x {
-                                    min_x = gl_rect.min.x;
-                                }
-                                println!("Min x: {} after", min_x);
-
-                                [
-                                    gl_rect.min.x,
-                                    gl_rect.max.y,
-                                    z,
-                                    gl_rect.max.x,
-                                    gl_rect.min.y,
-                                    tex_coords.min.x,
-                                    tex_coords.max.y,
-                                    tex_coords.max.x,
-                                    tex_coords.min.y,
-                                ]
-                            }
-                        ) {
-                            Ok(BrushAction::Draw(vertices)) => {
-                                // Draw new vertices.
-                                let vertex_count = vertices.len();
-                                let gl = self.gl.clone();
-                                gl.BindBuffer(gl::ARRAY_BUFFER, self.tbo);
-
-                                // Disable Position attribute,
-                                // since it's not used
-                                gl.DisableVertexAttribArray(0);
-
-                                gl.EnableVertexAttribArray(1);
-                                gl.EnableVertexAttribArray(2);
-                                gl.EnableVertexAttribArray(3);
-                                gl.EnableVertexAttribArray(4);
-
-                                println!("Min x: {}", min_x);
-
-                                unsafe {
-                                    if vertex_max < vertex_count {
-                                        println!("BufferData");
-                                        gl.BufferData(
-                                            gl::ARRAY_BUFFER,
-                                            (vertex_count * std::mem::size_of::<Vertex>()) as gl::types::GLsizeiptr,
-                                            vertices.as_ptr() as _,
-                                            gl::STATIC_DRAW,
-                                        );
-                                    } else {
-                                        println!("BufferSubData");
-                                        gl.BufferSubData(
-                                            gl::ARRAY_BUFFER,
-                                            0,
-                                            (vertex_count * std::mem::size_of::<Vertex>()) as gl::types::GLsizeiptr,
-                                            vertices.as_ptr() as _,
-                                        );
-                                    }
-                                }
-
-                                vertex_max = vertex_max.max(vertex_count);
-
-                                gl.DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, vertex_count as _);
-                            }
-
-                            Ok(BrushAction::ReDraw) => {
-                                // Re-draw last frame's vertices unmodified.
-                            }
-                            Err(BrushError::TextureTooSmall { suggested }) => {
-                                // Enlarge texture + glyph_brush texture cache and retry.
-                            }
-                        }
+                        // Enable TBO
+                        // Draw Triangle Strip for each glyph
                     }
-                    _ => ()
                 }
             }
         }
@@ -649,6 +777,15 @@ impl Program {
         self.gl.Uniform4fv(uniform_location, 1, vec.as_ptr());
     }
 
+    pub unsafe fn set_texture(&self, name: &str, texId: u32) {
+        let name = CString::new(name).unwrap();
+        let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
+
+        self.gl.Uniform1i(uniform_location, 0);
+        self.gl.ActiveTexture(gl::TEXTURE0);
+        self.gl.BindTexture(gl::TEXTURE_2D, texId as u32);
+    }
+
     pub unsafe fn set_gradient(&self, gradient: &canvas::Gradient) {
         let name = CString::new("first_color").unwrap();
         let uniform_location = self.gl.GetUniformLocation(self.id, name.as_ptr());
@@ -717,7 +854,7 @@ impl Program {
 
         self.gl.GetUniformiv(self.id, uniform_location, &mut boolean as _);
 
-        println!("Value: {} => {}", field, boolean);
+        //println!("Value: {} => {}", field, boolean);
     }
 }
 

@@ -1,16 +1,6 @@
 #version 330 core
-const mat4 INVERT_Y_AXIS = mat4(
-    vec4(1.0, 0.0, 0.0, 0.0),
-    vec4(0.0, -1.0, 0.0, 0.0),
-    vec4(0.0, 0.0, 1.0, 0.0),
-    vec4(0.0, 0.0, 0.0, 1.0)
-);
-
 layout (location = 0) in vec3 Position;
-layout (location = 1) in vec3 left_top;
-layout (location = 2) in vec2 right_bottom;
-layout (location = 3) in vec2 tex_left_top;
-layout (location = 4) in vec2 tex_right_bottom;
+layout (location = 1) in vec2 TexCoords;
 
 out VS_OUPUT {
   flat uint gradient_type;
@@ -41,37 +31,10 @@ void main() {
   vec4 calculated_position;
 
   if (is_textured == 1) {
-    vec2 pos = vec2(0.0);
-
-    float left = left_top.x;
-    float right = right_bottom.x;
-    float top = left_top.y;
-    float bottom = right_bottom.y;
-
-    switch (gl_VertexID) {
-        case 0:
-            pos = vec2(left, top);
-            OUT.f_tex_pos = vec2(tex_left_top.x, tex_right_bottom.y);
-            break;
-        case 1:
-            pos = vec2(right, top);
-            OUT.f_tex_pos = tex_right_bottom;
-            break;
-        case 2:
-            pos = vec2(left, bottom);
-            OUT.f_tex_pos = tex_left_top;
-            break;
-        case 3:
-            pos = vec2(right, bottom);
-            OUT.f_tex_pos = vec2(tex_right_bottom.x, tex_left_top.y);
-            break;
-    }
-
-    //f_color = color;
-    calculated_position = vec4(pos, left_top.z, 1.0);
-  } else {
-    calculated_position = vec4(Position.xyz, 1.0);
+    OUT.f_tex_pos = TexCoords;
   }
+
+  calculated_position = vec4(Position.xy, 1.0, 1.0);
 
   gl_Position = projection * model * calculated_position;
 

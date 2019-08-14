@@ -1,7 +1,6 @@
 use super::window;
 
 use std::collections::HashMap;
-use std::borrow::BorrowMut;
 
 use glutin::window::WindowId;
 
@@ -9,7 +8,7 @@ use glutin::event::{
     Event,
     WindowEvent,
     KeyboardInput,
-    VirtualKeyCode,
+    //VirtualKeyCode,
     ElementState::Pressed
 };
 
@@ -34,7 +33,7 @@ impl App {
     pub fn run(self) {
         let mut windows = self.windows;
 
-        for (id, window) in windows.iter_mut() {
+        for (_id, window) in windows.iter_mut() {
             // Set only if window is visible
             window.draw();
         }

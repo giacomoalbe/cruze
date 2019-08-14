@@ -50,6 +50,7 @@ void main() {
   Color = mix(IN.first_color, IN.last_color, clamp(factor, 0, 1));
 
   if (IN.is_textured == 1) {
-    Color.a = clamp(alpha, 0.3, 1);
+    Color.a *= clamp(alpha, 0, 1);
   }
+
 }

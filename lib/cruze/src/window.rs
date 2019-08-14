@@ -1,6 +1,5 @@
 use super::app;
 use super::render_gl;
-use super::canvas;
 
 use glutin::window::{WindowBuilder, WindowId};
 use glutin::event::VirtualKeyCode;
@@ -9,8 +8,6 @@ use glutin::{
     ContextWrapper,
     PossiblyCurrent
 };
-
-use gl::Gl;
 
 pub struct Window {
     pub id: WindowId,
