@@ -7,3 +7,4 @@ pub mod app;
 pub mod render_gl;
 pub mod canvas;
 pub mod program;
+pub mod font_manager;

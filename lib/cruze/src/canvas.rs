@@ -27,20 +27,7 @@ use lyon::tessellation::{
     StrokeTessellator,
 };
 
-#[derive(Debug)]
-pub struct Point2<T> {
-    x: T,
-    y: T,
-}
-
-impl<T> Point2<T> {
-    pub fn new(x: T, y: T) -> Point2<T> {
-        Point2 {
-            x,
-            y
-        }
-    }
-}
+use font_manager::FontManager;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
@@ -337,6 +324,7 @@ struct Ctx {
     stroke_tess: StrokeTessellator,
     mesh: VertexBuffers<CtxVertex, u32>,
     primitives: Vec<Primitive>,
+    font_manager: FontManager,
     fonts: Vec<String>,
     prim_id: usize,
     path_direction: CtxDirection,
@@ -352,6 +340,7 @@ impl Ctx {
             mesh: VertexBuffers::new(),
             primitives: vec![],
             fonts: vec![],
+            font_manager: FontManager::new(),
             gradient_direction: CtxDirection::GradientY,
             path_direction: CtxDirection::CW,
             prim_id: 0,
@@ -528,10 +517,26 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
+    fn layout_text(&mut self) {
+        // Ends the current text primitive
+        // and lays text out with given
+        // attributes from primitive
+
+        // We don't use the path generated from Lyon
+        // when dealing with text primitives
+        let (_, mut current_primitive) = self.build_path();
+
+        println!("Text primitive: {:#?}", current_primitive);
+
+        self.font_manager.position_glyphs(current_primitive);
+
+        self.primitives.push(current_primitive);
+    }
+
     fn text(&mut self, center: Point, chars: String) {
         self.commands.push(CtxCommand::Text(center, chars));
 
-        self.fill();
+        self.layout_text();
     }
 
     fn rect(&mut self, center: Point, width: f32, height: f32) {
@@ -653,6 +658,11 @@ impl Ctx {
         self.commands.push(CtxCommand::StrokeWidth(width));
     }
 
+    fn font_size(&mut self, width: f32) {
+        // Alias to `stroke_width` for text primitive
+        self.commands.push(CtxCommand::StrokeWidth(width));
+    }
+
     fn move_to(&mut self, p: Point) {
         self.commands.push(CtxCommand::MoveTo(p));
     }
@@ -734,6 +744,8 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
         Color::from_rgb(0.5, 0.4, 0.8),
         Color::from_rgb(0.9, 0.1, 0.2),
     );
+
+    ctx.font_size(24.0);
     ctx.text(point(400.0, 400.0), String::from(
         "Harry Porcher"
     ));
