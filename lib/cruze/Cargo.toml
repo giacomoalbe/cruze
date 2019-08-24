@@ -10,7 +10,7 @@ edition = "2018"
 image = "0.22.1"
 rusttype="0.7.7"
 cgmath = "0.17.0"
-lyon = { path = "../../../lyon" }
+lyon = "0.14.1"
 glyph_brush = "0.5.3"
 gl = { path = "../gl" }
 glutin = "0.22.0-alpha1"

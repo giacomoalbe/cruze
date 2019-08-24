@@ -13,10 +13,6 @@ pub struct Window {
     pub id: WindowId,
     pub context: ContextWrapper<PossiblyCurrent, glutin::window::Window>,
     renderer: render_gl::Renderer,
-    gl: gl::Gl,
-    width: u32,
-    height: u32,
-    title: &'static str,
 }
 
 impl Window {
@@ -57,12 +53,8 @@ impl Window {
 
         Window {
             renderer: renderer,
-            gl: gl,
             context: context,
             id: window_id,
-            width,
-            height,
-            title
         }
     }
 

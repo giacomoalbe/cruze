@@ -9,6 +9,7 @@ in VS_OUPUT {
   flat uint gradient_type;
   float radius;
   vec4 first_color;
+  vec4 calculated_position;
   vec4 last_color;
   vec2 start_pos;
   vec2 end_pos;
@@ -28,8 +29,8 @@ void main() {
    */
   float alpha = texture(font_tex, IN.f_tex_pos).r;
 
-  float x = (gl_FragCoord.x - IN.bbox.a) / (IN.bbox.g - IN.bbox.a);
-  float y = (gl_FragCoord.y - IN.bbox.b) / (IN.bbox.r - IN.bbox.b);
+  float x = (IN.calculated_position.x - IN.bbox.a) / (IN.bbox.g - IN.bbox.a);
+  float y = (IN.calculated_position.y - IN.bbox.b) / (IN.bbox.r - IN.bbox.b);
 
   float factor = 0.0;
 
@@ -42,7 +43,7 @@ void main() {
              dot(gradient_direction, gradient_direction);
   } else {
       // start_pos is the center
-      vec2 relative_position = gl_FragCoord.xy - IN.start_pos;
+      vec2 relative_position = IN.calculated_position.xy - IN.start_pos;
 
       factor = length(relative_position) / IN.radius;
   }

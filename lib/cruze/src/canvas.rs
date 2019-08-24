@@ -27,7 +27,10 @@ use lyon::tessellation::{
     StrokeTessellator,
 };
 
-use font_manager::FontManager;
+use super::font_manager::{
+    FontManager,
+    GlyphTexData
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
@@ -199,6 +202,27 @@ pub fn model(&self) -> cgmath::Matrix4<f32> {
 */
 
 #[derive(Debug)]
+pub struct CanvasData {
+    pub vertices: Vec<f32>,
+    pub indices: Vec<u32>,
+    pub glyph_vertices: Vec<f32>,
+    pub glyph_tex_data: Vec<GlyphTexData>,
+    pub primitives: Vec<Primitive>,
+}
+
+impl CanvasData {
+    pub fn new() -> CanvasData {
+        CanvasData {
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            glyph_vertices: Vec::new(),
+            glyph_tex_data: Vec::new(),
+            primitives: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Gradient {
     pub radius: f32,
     pub gradient_type: u32,
@@ -251,6 +275,8 @@ pub struct Primitive {
     pub kind: PrimitiveType,
     pub gradient: Gradient,
     pub num_vertices: u32,
+    pub center: Point,
+    pub model: cgmath::Matrix4<f32>,
     pub font: String,
     pub text: String,
     pub stroke_width: f32,
@@ -263,6 +289,8 @@ impl Primitive {
             font: String::from("dejavu"),
             kind: PrimitiveType::Path,
             text: String::new(),
+            center: point(0.0, 0.0),
+            model: cgmath::Transform::one(),
             gradient: Gradient::new(),
             stroke_width: 0.0,
             num_vertices: 0,
@@ -351,9 +379,9 @@ impl Ctx {
     fn begin_mesh(&mut self) {
     }
 
-    fn end_mesh(self) -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
+    fn end_mesh(mut self) -> CanvasData {
         let mut vertices: Vec<f32> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
+        let (glyph_vertices, glyph_tex_data) = self.font_manager.generate_glyph_vertices();
 
         for vertex in self.mesh.vertices.iter() {
             vertices.push(vertex.position.x);
@@ -361,13 +389,19 @@ impl Ctx {
             vertices.push(0.0);
         }
 
-        indices = self.mesh
+        let indices = self.mesh
             .indices
             .iter()
             .map(|index| *index as u32)
             .collect();
 
-        (vertices, indices, self.primitives, self.fonts)
+        CanvasData {
+            indices,
+            vertices,
+            primitives: self.primitives,
+            glyph_vertices,
+            glyph_tex_data
+        }
     }
 
     fn begin_primitive(&mut self) {
@@ -427,9 +461,10 @@ impl Ctx {
                     builder.arc(*c, *r, *s, *x);
                 },
                 CtxCommand::Text(c, t) => {
+                    current_primitive.center = *c;
                     current_primitive.font = "dejavu".to_string();
                     current_primitive.kind = PrimitiveType::Text;
-                    current_primitive.text = String::from(t);
+                    current_primitive.text = t.to_string();
                 },
                 CtxCommand::Close => builder.close(),
             };
@@ -526,9 +561,15 @@ impl Ctx {
         // when dealing with text primitives
         let (_, mut current_primitive) = self.build_path();
 
-        println!("Text primitive: {:#?}", current_primitive);
+        self.font_manager.position_glyphs(&mut current_primitive);
 
-        self.font_manager.position_glyphs(current_primitive);
+        current_primitive.model = cgmath::Matrix4::from_translation(
+            cgmath::Vector3::new(
+                current_primitive.center.x,
+                current_primitive.center.y,
+                0.0
+            )
+        );
 
         self.primitives.push(current_primitive);
     }
@@ -579,13 +620,9 @@ impl Ctx {
         let c_bl = point(c_left, c_bottom);
         let c_br = point(c_right, c_bottom);
 
-        let t_l: Point = point(c_left, c_top + radius);
         let t_r: Point = point(c_right, c_top + radius);
-        let r_t: Point = point(c_right + radius, c_top);
         let r_b: Point = point(c_right + radius, c_bottom);
-        let b_r: Point = point(c_right, c_bottom - radius);
         let b_l: Point = point(c_left, c_bottom - radius);
-        let l_b: Point = point(c_left - radius, c_bottom);
         let l_t: Point = point(c_left - radius, c_top);
 
         self.move_to(l_t);
@@ -687,21 +724,20 @@ impl Ctx {
     }
 }
 
-pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
+pub fn generate_mesh() -> CanvasData {
     let mut ctx = Ctx::new();
 
     ctx.begin_mesh();
 
-    /*
     ctx.begin_primitive();
     ctx.circle(point(400.0, 300.0), 100.0);
-    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.circle(point(300.0, 200.0), 48.0);
     ctx.color(Color::from_rgba(1.0, 1.0, 1.0, 0.3));
     ctx.fill();
 
     ctx.begin_primitive();
     ctx.circle(point(400.0, 300.0), 100.0);
-    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.circle(point(300.0, 200.0), 48.0);
     ctx.gradient_radial(
         Color::from_rgba(1.0, 1.0, 0.0, 1.0),
         Color::from_rgba(0.0, 0.0, 0.0, 0.0),
@@ -712,7 +748,7 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
 
     ctx.begin_primitive();
     ctx.circle(point(400.0, 300.0), 100.0);
-    //ctx.circle(point(300.0, 200.0), 48.0);
+    ctx.circle(point(300.0, 200.0), 48.0);
     ctx.gradient_x(
         Color::from_rgba(1.0, 0.0, 0.0, 1.0),
         Color::from_rgba(1.0, 1.0, 0.0, 1.0)
@@ -728,7 +764,6 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
         Color::from_rgba(0.8, 0.4, 0.6, 0.0),
     );
     ctx.fill();
-    */
 
     ctx.begin_primitive();
     ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 20.0);
@@ -744,11 +779,26 @@ pub fn generate_mesh() -> (Vec<f32>, Vec<u32>, Vec<Primitive>, Vec<String>) {
         Color::from_rgb(0.5, 0.4, 0.8),
         Color::from_rgb(0.9, 0.1, 0.2),
     );
+    ctx.font_size(150.0);
+    ctx.text(point(100.0, 600.0), String::from("Quliq"));
 
-    ctx.font_size(24.0);
-    ctx.text(point(400.0, 400.0), String::from(
-        "Harry Porcher"
-    ));
+    ctx.begin_primitive();
+    ctx.gradient_y(
+        Color::from_rgb(0.5, 0.4, 0.8),
+        Color::from_rgb(0.9, 0.1, 0.2),
+    );
+    ctx.font_size(150.0);
+    ctx.text(point(0.0, 0.0), String::from("Quliq"));
+
+    ctx.begin_primitive();
+    ctx.color(Color::from_rgb(0.4, 0.5, 0.7));
+    ctx.font_size(80.0);
+    ctx.text(point(200.0, 200.0), String::from("Simone"));
+
+    ctx.begin_primitive();
+    ctx.color(Color::from_rgb(0.1, 0.7, 0.8));
+    ctx.font_size(20.0);
+    ctx.text(point(400.0, 400.0), String::from("Insomma come andiamo ragazzo bello bello culo 1234565767899"));
 
     ctx.end_mesh()
 }
