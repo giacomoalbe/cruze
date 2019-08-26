@@ -8,6 +8,7 @@ use super::program::{
 };
 
 use super::canvas;
+use super::window::Widget;
 
 use std;
 use std::ffi::{
@@ -133,17 +134,18 @@ impl Renderer {
             gl.Enable(gl::MULTISAMPLE);
         }
 
-        renderer.generate_geometry_primitives();
-        renderer.bind_vertex_arrays();
+        renderer.create_vertex_arrays();
 
         renderer
     }
 
-    fn generate_geometry_primitives(&mut self) {
-        self.canvas_data = canvas::generate_mesh();
+    fn generate_geometry_primitives(&mut self, children: &Vec<Widget>) {
+        self.canvas_data = canvas::generate_mesh_from_widget(&children);
+
+        self.bind_vertex_arrays();
     }
 
-    fn bind_vertex_arrays(&mut self) {
+    fn create_vertex_arrays(&mut self) {
         // pbo = PRIMITIVE Buffer Object, keeps everything related to primitive
         // tbo = TEXT Buffer Object, keeps all data relative to font rendering
         // ebo = ELEMENT Buffer Object, data relative to Indices
@@ -159,8 +161,24 @@ impl Renderer {
             gl.GenBuffers(1, &mut ebo);
             gl.GenBuffers(1, &mut tbo);
 
-            gl.BindBuffer(gl::ARRAY_BUFFER, pbo);
-            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            // Unbind VAO
+            gl.BindVertexArray(0);
+
+            (vao, pbo, tbo, ebo)
+        };
+
+        self.vao = vao;
+        self.pbo = pbo;
+        self.tbo = tbo;
+        self.ebo = ebo;
+    }
+
+    fn bind_vertex_arrays(&mut self) {
+        unsafe {
+            let gl = self.gl.clone();
+
+            gl.BindBuffer(gl::ARRAY_BUFFER, self.pbo);
+            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
 
             gl.BufferData(
                 gl::ARRAY_BUFFER,
@@ -176,7 +194,7 @@ impl Renderer {
                 gl::STATIC_DRAW
             );
 
-            gl.BindBuffer(gl::ARRAY_BUFFER, tbo);
+            gl.BindBuffer(gl::ARRAY_BUFFER, self.tbo);
 
             gl.BufferData(
                 gl::ARRAY_BUFFER,
@@ -204,14 +222,7 @@ impl Renderer {
             // Unbind both VBO and VAO
             gl.BindBuffer(gl::ARRAY_BUFFER, 0);
             gl.BindVertexArray(0);
-
-            (vao, pbo, tbo, ebo)
-        };
-
-        self.vao = vao;
-        self.pbo = pbo;
-        self.tbo = tbo;
-        self.ebo = ebo;
+        }
     }
 
     pub fn draw(&mut self) {
@@ -319,7 +330,9 @@ impl Renderer {
         println!("Frame render: {}", _start_time.elapsed().as_micros());
     }
 
-    pub fn resize(&mut self, size: glutin::dpi::LogicalSize) {
+    pub fn resize(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Widget>) {
+        self.generate_geometry_primitives(&children);
+
         unsafe {
             self.projection = cgmath::ortho(
                 0.0,

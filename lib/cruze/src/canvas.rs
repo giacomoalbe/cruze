@@ -32,6 +32,8 @@ use super::font_manager::{
     GlyphTexData
 };
 
+use super::window::Widget;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
     r: f32,
@@ -63,10 +65,10 @@ impl Color {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Size<T> {
-    width: T,
-    height: T,
+    pub width: T,
+    pub height: T,
 }
 
 impl<T> Size<T> {
@@ -580,11 +582,11 @@ impl Ctx {
         self.layout_text();
     }
 
-    fn rect(&mut self, center: Point, width: f32, height: f32) {
-        let l = center.x - width / 2.0;
-        let r = center.x + width / 2.0;
-        let b = center.y - height / 2.0;
-        let t = center.y + height / 2.0;
+    fn rect(&mut self, top_left: Point, width: f32, height: f32) {
+        let l = top_left.x;
+        let r = top_left.x + width;
+        let b = top_left.y;
+        let t = top_left.y + height;
 
         if self.path_direction == CtxDirection::CCW {
             // Start from BottomLeft and go CCW to TopLeft
@@ -799,6 +801,22 @@ pub fn generate_mesh() -> CanvasData {
     ctx.color(Color::from_rgb(0.1, 0.7, 0.8));
     ctx.font_size(20.0);
     ctx.text(point(400.0, 400.0), String::from("Insomma come andiamo ragazzo bello bello culo 1234565767899"));
+
+    ctx.end_mesh()
+}
+
+pub fn generate_mesh_from_widget(children: &Vec<Widget>) -> CanvasData {
+    println!("Widgets: {}", children.len());
+    let mut ctx = Ctx::new();
+
+    ctx.begin_mesh();
+
+    for child in children.iter() {
+        ctx.begin_primitive();
+        ctx.color(child.color);
+        ctx.rect(child.position, child.size.width, child.size.height);
+        ctx.fill();
+    }
 
     ctx.end_mesh()
 }
