@@ -357,7 +357,6 @@ pub struct Ctx {
     stroke_tess: StrokeTessellator,
     mesh: VertexBuffers<CtxVertex, u32>,
     primitives: Vec<Primitive>,
-    font_manager: FontManager,
     fonts: Vec<String>,
     prim_id: usize,
     path_direction: CtxDirection,
@@ -373,7 +372,6 @@ impl Ctx {
             mesh: VertexBuffers::new(),
             primitives: vec![],
             fonts: vec![],
-            font_manager: FontManager::new(),
             gradient_direction: CtxDirection::GradientY,
             path_direction: CtxDirection::CW,
             prim_id: 0,
@@ -384,9 +382,9 @@ impl Ctx {
     fn begin_mesh(&mut self) {
     }
 
-    fn end_mesh(mut self) -> CanvasData {
+    fn end_mesh(mut self, font_manager: &mut FontManager) -> CanvasData {
         let mut vertices: Vec<f32> = Vec::new();
-        let (glyph_vertices, glyph_tex_data) = self.font_manager.generate_glyph_vertices();
+        let (glyph_vertices, glyph_tex_data) = font_manager.generate_glyph_vertices();
 
         for vertex in self.mesh.vertices.iter() {
             vertices.push(vertex.position.x);
@@ -489,6 +487,8 @@ impl Ctx {
             bbox.center().x - bbox.size.width / 2.0,
         );
 
+        current_primitive.model = cgmath::Transform::one();
+
         self.fonts.push(current_primitive.font.clone());
 
         (path, current_primitive)
@@ -557,7 +557,7 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
-    fn layout_text(&mut self) {
+    fn layout_text(&mut self, font_manager: &mut FontManager) {
         // Ends the current text primitive
         // and lays text out with given
         // attributes from primitive
@@ -566,7 +566,7 @@ impl Ctx {
         // when dealing with text primitives
         let (_, mut current_primitive) = self.build_path();
 
-        self.font_manager.position_glyphs(&mut current_primitive);
+        font_manager.position_glyphs(&mut current_primitive);
 
         current_primitive.model = cgmath::Matrix4::from_translation(
             cgmath::Vector3::new(
@@ -579,10 +579,10 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
-    pub fn text(&mut self, center: Point, chars: String) {
+    pub fn text(&mut self, center: Point, chars: String, font_manager: &mut FontManager) {
         self.commands.push(CtxCommand::Text(center, chars));
 
-        self.layout_text();
+        self.layout_text(font_manager);
     }
 
     pub fn rect(&mut self, top_left: Point, width: f32, height: f32) {
@@ -738,6 +738,7 @@ impl Ctx {
     }
 }
 
+/*
 pub fn generate_mesh() -> CanvasData {
     let mut ctx = Ctx::new();
 
@@ -816,15 +817,16 @@ pub fn generate_mesh() -> CanvasData {
 
     ctx.end_mesh()
 }
+*/
 
-pub fn generate_mesh_from_widget(children: &Vec<Box<dyn Widget>>) -> CanvasData {
+pub fn generate_mesh_from_widget(children: &Vec<Box<dyn Widget>>, font_manager: &mut FontManager) -> CanvasData {
     let mut ctx = Ctx::new();
 
     ctx.begin_mesh();
 
     for child in children.iter() {
-        child.draw(&mut ctx);
+        child.draw(&mut ctx, font_manager);
     }
 
-    ctx.end_mesh()
+    ctx.end_mesh(font_manager)
 }

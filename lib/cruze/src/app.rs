@@ -74,11 +74,9 @@ impl App {
                         Some(window) => {
                             match event {
                                 WindowEvent::Resized(logical_size) => {
-                                    println!("Resized");
                                     window.resize(logical_size);
                                 },
                                 WindowEvent::RedrawRequested => {
-                                    println!("RedrawRequested");
                                     window.draw();
                                 },
                                 WindowEvent::CloseRequested => {

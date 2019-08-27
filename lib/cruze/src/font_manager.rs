@@ -36,10 +36,20 @@ impl FontManager {
         }
     }
 
-    pub fn position_glyphs<'a>(&mut self, primitive: &mut canvas::Primitive) {
-        let scale = Scale::uniform(primitive.stroke_width);
+    pub fn position_glyphs(&mut self, primitive: &mut canvas::Primitive) {
+        let (bbox, mut result) = self.calculate_text_bbox(primitive.stroke_width, primitive.font.to_string(), &primitive.text);
 
-        let font = match self.font_caches.entry(primitive.font.clone()) {
+        primitive.bbox = bbox;
+        primitive.num_vertices = primitive.text.split_whitespace().collect::<String>().len() as u32;
+
+        self.glyphs.append(&mut result);
+    }
+
+    pub fn calculate_text_bbox(&mut self, stroke_width: f32, font: String, text: &str)
+        -> (cgmath::Vector4<f32>, Vec<PositionedGlyph<'static>>) {
+        let scale = Scale::uniform(stroke_width);
+
+        let font = match self.font_caches.entry(font.clone()) {
             Entry::Vacant(entry) => {
                 // TODO: pick the correct font with font-kit
                 let font_data = include_bytes!("../fonts/DejaVuSans.ttf");
@@ -66,7 +76,7 @@ impl FontManager {
         let mut min_y: i32 = 10000;
         let mut max_y: i32 = 0;
 
-        for c in primitive.text.chars() {
+        for c in text.chars() {
             let base_glyph = font.glyph(c);
 
             if let Some(id) = last_glyph_id.take() {
@@ -94,16 +104,13 @@ impl FontManager {
         }
 
         let bbox = cgmath::Vector4::new(
-            max_y as f32,
-            max_x as f32,
-            min_y as f32,
-            min_x as f32
+            max_y as f32, // x
+            max_x as f32, // y
+            min_y as f32, // z
+            min_x as f32, // w
         );
 
-        primitive.bbox = bbox;
-        primitive.num_vertices = primitive.text.split_whitespace().collect::<String>().len() as u32;
-
-        self.glyphs.append(&mut result);
+        (bbox, result)
     }
 
     pub fn cache_glyphs(&mut self) -> Vec<GlyphTexData> {

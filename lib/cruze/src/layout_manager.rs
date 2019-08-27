@@ -1,6 +1,7 @@
 use super::widgets::Widget;
 
 use super::canvas;
+use super::font_manager::FontManager;
 
 use stretch::{
     style::*,
@@ -9,12 +10,6 @@ use stretch::{
     },
     geometry::Size
 };
-
-pub struct WidgetPosLoc {
-    pub size: canvas::Size<f32>,
-    pub position: lyon::math::Point,
-    pub index: usize
-}
 
 pub struct LayoutBuilder {
 }
@@ -25,13 +20,13 @@ impl LayoutBuilder {
         }
     }
 
-    pub fn build(&mut self, size: glutin::dpi::LogicalSize, children: &mut Vec<Box<dyn Widget>>) {
+    pub fn build(&mut self, size: glutin::dpi::LogicalSize, children: &mut Vec<Box<dyn Widget>>, font_manager: &mut FontManager) {
         let mut stretch = Stretch::new();
 
         let mut children_nodes  = vec![];
 
         for child in children.iter() {
-            children_nodes.push(child.generate_stretch_node(&mut stretch));
+            children_nodes.push(child.generate_stretch_node(&mut stretch, font_manager));
         }
 
         let main_node = stretch.new_node(

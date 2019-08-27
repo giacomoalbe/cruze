@@ -1,15 +1,18 @@
 use super::app;
 use super::render_gl;
 use super::layout_manager;
+use super::font_manager;
+
 use super::canvas::{
     Size,
     Color,
 };
 
 use super::widgets::{
-    Col,
-    Row,
+    Orientation,
+    Alignment,
     Rect,
+    Label,
     Widget,
     WidgetOptions
 };
@@ -29,6 +32,7 @@ pub struct Window {
     size: glutin::dpi::LogicalSize,
     renderer: render_gl::Renderer,
     layout: layout_manager::LayoutBuilder,
+    font_manager: font_manager::FontManager,
 }
 
 impl Window {
@@ -39,10 +43,10 @@ impl Window {
                 width: width as f64,
                 height: height as f64
             })
-        .with_min_inner_size(glutin::dpi::LogicalSize {
-            width: 300 as f64,
-            height: 300 as f64
-        });
+            .with_min_inner_size(glutin::dpi::LogicalSize {
+                width: 300 as f64,
+                height: 300 as f64
+            });
 
         let context = ContextBuilder::new()
             .with_multisampling(8)
@@ -65,14 +69,15 @@ impl Window {
             height: height as f64
         };
 
-        let mut renderer = render_gl::Renderer::new(&gl);
-
+        let renderer = render_gl::Renderer::new(&gl);
         let layout = layout_manager::LayoutBuilder::new();
+        let font_manager = font_manager::FontManager::new();
 
         let mut window = Window {
             children: vec![],
             size: window_size,
             renderer: renderer,
+            font_manager: font_manager,
             layout: layout,
             context: context,
             id: window_id,
@@ -85,44 +90,10 @@ impl Window {
 
     pub fn generate_content(&mut self) {
         self.children.push(
-            Col::new(
+            Rect::new(
                 WidgetOptions::default(),
                 vec![
-                    /*
-                    Row::new(
-                        WidgetOptions {
-                            padding: WidgetOptions::uniform_padding(10.0),
-                            ..Default::default()
-                        },
-                        vec![
-                            Col::new(
-                                WidgetOptions {
-                                    margin: WidgetOptions::uniform_padding(5.0),
-                                    color: Color::from_rgb(1.0, 0.0, 0.0),
-                                    ..Default::default()
-                                },
-                                vec![]
-                            ),
-                            Col::new(
-                                WidgetOptions {
-                                    margin: WidgetOptions::uniform_padding(5.0),
-                                    color: Color::from_rgb(0.0, 1.0, 0.0),
-                                    ..Default::default()
-                                },
-                                vec![]
-                            ),
-                            Col::new(
-                                WidgetOptions {
-                                    margin: WidgetOptions::uniform_padding(5.0),
-                                    color: Color::from_rgb(0.0, 0.0, 1.0),
-                                    ..Default::default()
-                                },
-                                vec![]
-                            ),
-                        ]
-                    ),
-                    */
-                    Row::new(
+                    Rect::new(
                         WidgetOptions {
                             padding: WidgetOptions::uniform_padding(10.0),
                             ..Default::default()
@@ -131,24 +102,126 @@ impl Window {
                             Rect::new(
                                 WidgetOptions {
                                     radius: 15.0,
+                                    orientation: Orientation::Column,
+                                    vertical_align: Alignment::SpaceAround,
+                                    horizontal_align: Alignment::Center,
+                                    margin: WidgetOptions::uniform_padding(10.0),
+                                    color: Color::from_rgb(0.0, 0.0, 1.0),
+                                    ..Default::default()
+                                },
+                                vec![
+                                    Rect::new(
+                                        WidgetOptions {
+                                            radius: 40.0,
+                                            size: WidgetOptions::uniform_size(80.0),
+                                            color: Color::from_rgb(0.0, 0.0, 0.0),
+                                            ..Default::default()
+                                        },
+                                        vec![]
+                                    ),
+                                    Rect::new(
+                                        WidgetOptions {
+                                            radius: 40.0,
+                                            size: WidgetOptions::uniform_size(80.0),
+                                            color: Color::from_rgb(1.0, 0.0, 0.0),
+                                            ..Default::default()
+                                        },
+                                        vec![]
+                                    ),
+                                    Rect::new(
+                                        WidgetOptions {
+                                            radius: 40.0,
+                                            size: WidgetOptions::uniform_size(80.0),
+                                            color: Color::from_rgb(1.0, 1.0, 0.0),
+                                            ..Default::default()
+                                        },
+                                        vec![]
+                                    )
+                                ]
+                            ),
+                            Rect::new(
+                                WidgetOptions {
+                                    flex: 1.0,
+                                    radius: 15.0,
+                                    vertical_align: Alignment::Center,
+                                    horizontal_align: Alignment::Center,
+                                    padding: WidgetOptions::uniform_padding(15.0),
+                                    margin: WidgetOptions::uniform_padding(10.0),
+                                    color: Color::from_rgb(0.0, 1.0, 0.0),
+                                    ..Default::default()
+                                },
+                                vec![
+                                    Label::new(
+                                        WidgetOptions {
+                                            color: Color::from_rgb(0.0, 0.0, 1.0),
+                                            ..Default::default()
+                                        },
+                                        "Text2".to_string()
+                                    )
+                                ]
+                            ),
+                            Rect::new(
+                                WidgetOptions {
+                                    flex: 1.0,
+                                    radius: 15.0,
+                                    vertical_align: Alignment::Center,
+                                    horizontal_align: Alignment::Center,
+                                    padding: WidgetOptions::uniform_padding(15.0),
+                                    margin: WidgetOptions::uniform_padding(10.0),
+                                    color: Color::from_rgb(0.0, 1.0, 0.0),
+                                    ..Default::default()
+                                },
+                                vec![
+                                    Label::new(
+                                        WidgetOptions {
+                                            color: Color::from_rgb(0.0, 0.0, 1.0),
+                                            ..Default::default()
+                                        },
+                                        "Text3Longer".to_string()
+                                    )
+                                ]
+                            ),
+                            Rect::new(
+                                WidgetOptions {
+                                    radius: 15.0,
+                                    vertical_align: Alignment::Start,
+                                    horizontal_align: Alignment::End,
+                                    padding: WidgetOptions::uniform_padding(15.0),
+                                    margin: WidgetOptions::uniform_padding(10.0),
+                                    color: Color::from_rgb(0.0, 1.0, 0.0),
+                                    ..Default::default()
+                                },
+                                vec![
+                                    Label::new(
+                                        WidgetOptions {
+                                            color: Color::from_rgb(0.0, 0.0, 1.0),
+                                            ..Default::default()
+                                        },
+                                        "Text1".to_string()
+                                    )
+                                ]
+                            ),
+                            Rect::new(
+                                WidgetOptions {
+                                    radius: 15.0,
+                                    vertical_align: Alignment::Center,
+                                    horizontal_align: Alignment::Center,
+                                    margin: WidgetOptions::uniform_padding(10.0),
                                     size: WidgetOptions::percent(10.0),
                                     color: Color::from_rgb(0.5, 0.5, 0.5),
                                     ..Default::default()
-                                }
-                            ),
-                            Rect::new(
-                                WidgetOptions {
-                                    radius: 15.0,
-                                    color: Color::from_rgb(0.0, 1.0, 0.0),
-                                    ..Default::default()
-                                }
-                            ),
-                            Rect::new(
-                                WidgetOptions {
-                                    radius: 15.0,
-                                    color: Color::from_rgb(0.0, 0.0, 1.0),
-                                    ..Default::default()
-                                }
+                                },
+                                vec![
+                                    Rect::new(
+                                        WidgetOptions {
+                                            radius: 20.0,
+                                            size: WidgetOptions::uniform_size(40.0),
+                                            color: Color::from_rgb(1.0, 0.0, 0.0),
+                                            ..Default::default()
+                                        },
+                                        vec![]
+                                    )
+                                ]
                             ),
                         ]
                     )
@@ -156,7 +229,7 @@ impl Window {
             )
         );
 
-        self.renderer.resize(self.size, &self.children);
+        self.renderer.resize(self.size, &self.children, &mut self.font_manager);
     }
 
     pub fn draw(&mut self) {
@@ -178,9 +251,9 @@ impl Window {
     pub fn resize(&mut self, size: glutin::dpi::LogicalSize) {
         self.size = size;
 
-        self.layout.build(self.size, &mut self.children);
+        self.layout.build(self.size, &mut self.children, &mut self.font_manager);
 
-        self.renderer.resize(size, &self.children);
+        self.renderer.resize(size, &self.children, &mut self.font_manager);
     }
 
     pub fn send_key(&mut self, key: VirtualKeyCode) {

@@ -5,6 +5,7 @@ use super::program::{
 };
 
 use super::canvas;
+use super::font_manager::FontManager;
 use super::widgets::{
     Widget,
     Rect
@@ -129,8 +130,8 @@ impl Renderer {
         renderer
     }
 
-    fn generate_geometry_primitives(&mut self, children: &Vec<Box<dyn Widget>>) {
-        self.canvas_data = canvas::generate_mesh_from_widget(&children);
+    fn generate_geometry_primitives(&mut self, children: &Vec<Box<dyn Widget>>, font_manager: &mut FontManager) {
+        self.canvas_data = canvas::generate_mesh_from_widget(&children, font_manager);
         //self.canvas_data = canvas::generate_mesh();
 
         self.bind_vertex_arrays();
@@ -235,7 +236,6 @@ impl Renderer {
     }
 
     pub fn draw_primitives(&mut self) {
-
         let gl = self.gl.clone();
 
         let mut tris_offset = 0;
@@ -246,6 +246,7 @@ impl Renderer {
                 self.program.set_vec4("bbox", &primitive.bbox);
                 self.program.set_gradient(&primitive.gradient);
                 self.program.get_bool("is_textured");
+                self.program.set_mat4("model", &primitive.model);
 
                 match primitive.kind {
                     canvas::PrimitiveType::Path => {
@@ -283,7 +284,6 @@ impl Renderer {
                     canvas::PrimitiveType::Text => {
                         self.program.set_bool("is_textured", true);
                         self.program.set_texture("font_tex", self.texture.name);
-                        self.program.set_mat4("model", &primitive.model);
 
                         gl.BindBuffer(gl::ARRAY_BUFFER, self.tbo);
 
@@ -318,8 +318,8 @@ impl Renderer {
         }
     }
 
-    pub fn resize(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Box<dyn Widget>>) {
-        self.generate_geometry_primitives(&children);
+    pub fn resize(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Box<dyn Widget>>, font_manager: &mut FontManager) {
+        self.generate_geometry_primitives(&children, font_manager);
 
         unsafe {
             self.projection = cgmath::ortho(
