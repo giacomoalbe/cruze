@@ -32,9 +32,12 @@ use super::font_manager::{
     GlyphTexData
 };
 
-use super::window::Widget;
+use super::widgets::{
+    Widget,
+    Rect
+};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Color {
     r: f32,
     g: f32,
@@ -65,7 +68,7 @@ impl Color {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Size<T> {
     pub width: T,
     pub height: T,
@@ -349,7 +352,7 @@ enum CtxDirection {
     GradientRadial(Vector, f32),
 }
 
-struct Ctx {
+pub struct Ctx {
     fill_tess: FillTessellator,
     stroke_tess: StrokeTessellator,
     mesh: VertexBuffers<CtxVertex, u32>,
@@ -406,7 +409,7 @@ impl Ctx {
         }
     }
 
-    fn begin_primitive(&mut self) {
+    pub fn begin_primitive(&mut self) {
         self.commands.clear();
         self.path_direction = CtxDirection::CW;
         self.gradient_direction = CtxDirection::GradientY;
@@ -491,7 +494,7 @@ impl Ctx {
         (path, current_primitive)
     }
 
-    fn fill(&mut self) {
+    pub fn fill(&mut self) {
         // Ends the current primitive
         // and fills current path
         // with the fillPaint provided
@@ -522,7 +525,7 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
-    fn stroke(&mut self) {
+    pub fn stroke(&mut self) {
         // Ends the current primitive
         // and draws the stroke with the given
         // color and path
@@ -576,13 +579,13 @@ impl Ctx {
         self.primitives.push(current_primitive);
     }
 
-    fn text(&mut self, center: Point, chars: String) {
+    pub fn text(&mut self, center: Point, chars: String) {
         self.commands.push(CtxCommand::Text(center, chars));
 
         self.layout_text();
     }
 
-    fn rect(&mut self, top_left: Point, width: f32, height: f32) {
+    pub fn rect(&mut self, top_left: Point, width: f32, height: f32) {
         let l = top_left.x;
         let r = top_left.x + width;
         let b = top_left.y;
@@ -605,17 +608,26 @@ impl Ctx {
         self.close();
     }
 
-    fn round_rect(&mut self, center: Point, width: f32, height: f32, radius: f32) {
+    pub fn round_rect(&mut self, top_left: Point, width: f32, height: f32, radius: f32) {
+        if width == 0.0 || height == 0.0 {
+            return;
+        }
+
+        if radius <= 0.0 {
+            self.rect(top_left, width, height);
+            return;
+        }
+
         let min_w_h = width.min(height);
 
         let radius = radius.min(min_w_h / 2.0);
 
         let radii: Vector = vector(radius, radius);
 
-        let c_left = center.x - width / 2.0 + radius;
-        let c_right = center.x + width / 2.0 - radius;
-        let c_top = center.y + height / 2.0 - radius;
-        let c_bottom = center.y - height / 2.0 + radius;
+        let c_left = top_left.x + radius;
+        let c_right = top_left.x + width - radius;
+        let c_top = top_left.y + height - radius;
+        let c_bottom = top_left.y + radius;
 
         let c_tl= point(c_left, c_top);
         let c_tr = point(c_right, c_top);
@@ -640,7 +652,7 @@ impl Ctx {
         self.close();
     }
 
-    fn circle(&mut self, center: Point, radius: f32) {
+    pub fn circle(&mut self, center: Point, radius: f32) {
         let radii: Vector = vector(radius, radius);
 
         let (mut start_angle, mut arc_angle) = (180.0, 360.0);
@@ -665,11 +677,11 @@ impl Ctx {
         self.path_direction = direction;
     }
 
-    fn color(&mut self, c: Color) {
+    pub fn color(&mut self, c: Color) {
         self.gradient_y(c, c);
     }
 
-    fn gradient_y(&mut self, first_color: Color, last_color: Color) {
+    pub fn gradient_y(&mut self, first_color: Color, last_color: Color) {
         self.commands.push(CtxCommand::Gradient(
                 CtxDirection::GradientY,
                 first_color,
@@ -677,7 +689,7 @@ impl Ctx {
         ));
     }
 
-    fn gradient_x(&mut self, first_color: Color, last_color: Color) {
+    pub fn gradient_x(&mut self, first_color: Color, last_color: Color) {
         self.commands.push(CtxCommand::Gradient(
                 CtxDirection::GradientX,
                 first_color,
@@ -685,7 +697,7 @@ impl Ctx {
         ));
     }
 
-    fn gradient_radial(&mut self, first_color: Color, last_color: Color, center: Vector, radius: f32) {
+    pub fn gradient_radial(&mut self, first_color: Color, last_color: Color, center: Vector, radius: f32) {
         self.commands.push(CtxCommand::Gradient(
                 CtxDirection::GradientRadial(center, radius),
                 first_color,
@@ -693,11 +705,11 @@ impl Ctx {
         ));
     }
 
-    fn stroke_width(&mut self, width: f32) {
+    pub fn stroke_width(&mut self, width: f32) {
         self.commands.push(CtxCommand::StrokeWidth(width));
     }
 
-    fn font_size(&mut self, width: f32) {
+    pub fn font_size(&mut self, width: f32) {
         // Alias to `stroke_width` for text primitive
         self.commands.push(CtxCommand::StrokeWidth(width));
     }
@@ -768,7 +780,7 @@ pub fn generate_mesh() -> CanvasData {
     ctx.fill();
 
     ctx.begin_primitive();
-    ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 20.0);
+    ctx.round_rect(point(200.0, 200.0), 100.0, 100.0, 0.0);
     ctx.round_rect(point(200.0, 200.0), 70.0, 70.0, 20.0);
     ctx.gradient_y(
         Color::from_rgba(0.8, 0.4, 0.6, 1.0),
@@ -805,17 +817,13 @@ pub fn generate_mesh() -> CanvasData {
     ctx.end_mesh()
 }
 
-pub fn generate_mesh_from_widget(children: &Vec<Widget>) -> CanvasData {
-    println!("Widgets: {}", children.len());
+pub fn generate_mesh_from_widget(children: &Vec<Box<dyn Widget>>) -> CanvasData {
     let mut ctx = Ctx::new();
 
     ctx.begin_mesh();
 
     for child in children.iter() {
-        ctx.begin_primitive();
-        ctx.color(child.color);
-        ctx.rect(child.position, child.size.width, child.size.height);
-        ctx.fill();
+        child.draw(&mut ctx);
     }
 
     ctx.end_mesh()

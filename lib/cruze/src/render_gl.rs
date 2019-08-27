@@ -1,6 +1,3 @@
-extern crate rusttype;
-extern crate image;
-
 use gl;
 use super::program::{
     Shader,
@@ -8,7 +5,10 @@ use super::program::{
 };
 
 use super::canvas;
-use super::window::Widget;
+use super::widgets::{
+    Widget,
+    Rect
+};
 
 use std;
 use std::ffi::{
@@ -20,11 +20,6 @@ use cgmath::{
 };
 
 use cgmath::prelude::*;
-
-use rusttype::{
-    gpu_cache::Cache,
-    Font,
-};
 
 struct GlGlyphTexture {
     name: gl::types::GLuint,
@@ -73,11 +68,6 @@ impl Drop for GlGlyphTexture {
             self.gl.DeleteTextures(1, &self.name);
         }
     }
-}
-
-pub struct FontCache {
-    pub cache: Cache<'static>,
-    pub font: Font<'static>,
 }
 
 pub struct Renderer {
@@ -139,8 +129,9 @@ impl Renderer {
         renderer
     }
 
-    fn generate_geometry_primitives(&mut self, children: &Vec<Widget>) {
+    fn generate_geometry_primitives(&mut self, children: &Vec<Box<dyn Widget>>) {
         self.canvas_data = canvas::generate_mesh_from_widget(&children);
+        //self.canvas_data = canvas::generate_mesh();
 
         self.bind_vertex_arrays();
     }
@@ -244,7 +235,6 @@ impl Renderer {
     }
 
     pub fn draw_primitives(&mut self) {
-        let _start_time = std::time::Instant::now();
 
         let gl = self.gl.clone();
 
@@ -326,11 +316,9 @@ impl Renderer {
                 }
             }
         }
-
-        println!("Frame render: {}", _start_time.elapsed().as_micros());
     }
 
-    pub fn resize(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Widget>) {
+    pub fn resize(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Box<dyn Widget>>) {
         self.generate_geometry_primitives(&children);
 
         unsafe {
@@ -342,17 +330,6 @@ impl Renderer {
                 -1.0,
                 1.0
             );
-
-            /*
-               self.rectangle.translate(
-               cgmath::Vector2::new(
-               size.width as f32 / 2.0,
-               size.height as f32 / 2.0
-               )
-               );
-
-               self.model = self.rectangle.model();
-               */
 
             self.gl.Viewport(0, 0, size.width as i32, size.height as i32);
         }

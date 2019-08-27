@@ -1,12 +1,10 @@
-use super::window::Widget;
+use super::widgets::Widget;
 
 use super::canvas;
 
 use stretch::{
     style::*,
-    number::Number,
     node::{
-        Node,
         Stretch,
     },
     geometry::Size
@@ -26,21 +24,14 @@ impl LayoutBuilder {
         LayoutBuilder {
         }
     }
-    pub fn build(&mut self, size: glutin::dpi::LogicalSize, children: &Vec<Widget>) -> Vec<WidgetPosLoc> {
+
+    pub fn build(&mut self, size: glutin::dpi::LogicalSize, children: &mut Vec<Box<dyn Widget>>) {
         let mut stretch = Stretch::new();
 
         let mut children_nodes  = vec![];
 
         for child in children.iter() {
-            children_nodes.push(
-                stretch.new_node(
-                    Style {
-                        flex_grow: child.flex,
-                        ..Default::default()
-                    },
-                    vec![],
-                ).unwrap()
-            );
+            children_nodes.push(child.generate_stretch_node(&mut stretch));
         }
 
         let main_node = stretch.new_node(
@@ -59,26 +50,13 @@ impl LayoutBuilder {
             Size::undefined()
         ).unwrap();
 
-        let mut children_pos_loc = vec![];
-
         for (index, child_node) in stretch.children(main_node).unwrap().iter().enumerate() {
-            let child_node_layout = stretch.layout(*child_node).unwrap();
+            // Get child at position index, this is the array of children of Window
+            let mut child = children.get_mut(index).unwrap();
 
-            children_pos_loc.push(WidgetPosLoc {
-                size: canvas::Size {
-                    width: child_node_layout.size.width,
-                    height: child_node_layout.size.height
-                },
-                position: lyon::math::point(
-                    child_node_layout.location.x,
-                    child_node_layout.location.y
-                ),
-                index: index,
-            });
+            child.update_layout(&stretch, child_node);
 
-            println!("Index: {}\nSize: {:?}\nLocation: {:?}\n#############", index, child_node_layout.size, child_node_layout.location);
+            //println!("Index: {}\nSize: {:?}\nLocation: {:?}\n#############", index, child_node_layout.size, child_node_layout.location);
         }
-
-        children_pos_loc
     }
 }

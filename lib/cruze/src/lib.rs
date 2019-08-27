@@ -10,3 +10,4 @@ pub mod layout_manager;
 pub mod canvas;
 pub mod program;
 pub mod font_manager;
+pub mod widgets;
