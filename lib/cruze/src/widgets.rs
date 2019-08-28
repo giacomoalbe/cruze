@@ -80,23 +80,26 @@ pub trait Widget {
     fn generate_stretch_node(&self, stretch: &mut Stretch, font_manager: &mut FontManager) -> stretch::node::Node;
     fn set_size(&mut self, size: Size<f32>);
     fn set_position(&mut self, position: Point);
-    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node) {
+    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node, position: Point) {
         ()
     }
-    fn update_coords(&mut self, position: Point);
     fn debug(&self);
 }
 
 pub struct WidgetOptions {
+    pub id: String,
     pub color: Color,
     pub padding: stretch::geometry::Rect<stretch::style::Dimension>,
     pub margin: stretch::geometry::Rect<stretch::style::Dimension>,
     pub vertical_align: Alignment,
     pub horizontal_align: Alignment,
     pub radius: f32,
-    pub size: stretch::geometry::Size<Dimension>,
+    pub width: stretch::style::Dimension,
+    pub height: stretch::style::Dimension,
     pub orientation: Orientation,
     pub flex: f32,
+    pub font_size: f32,
+    pub debug: bool,
 }
 
 impl WidgetOptions {
@@ -127,18 +130,19 @@ impl WidgetOptions {
 impl Default for WidgetOptions {
     fn default() -> WidgetOptions {
         WidgetOptions {
+            id: "###".to_string(),
             color: Color::from_rgb(1.0, 1.0, 1.0),
             padding: WidgetOptions::uniform_padding(0.0),
             margin: WidgetOptions::uniform_padding(0.0),
             radius: 0.0,
             orientation: Orientation::Row,
-            size: stretch::geometry::Size {
-                width: Dimension::Undefined,
-                height: Dimension::Undefined
-            },
+            width: Dimension::Undefined,
+            height: Dimension::Undefined,
             vertical_align: Alignment::Undefined,
             horizontal_align: Alignment::Undefined,
-            flex: 1.0
+            font_size: 14.0,
+            flex: 1.0,
+            debug: false,
         }
     }
 }
@@ -196,14 +200,19 @@ impl Widget for Container {
             _ => ()
         }
 
+        let size = stretch::geometry::Size {
+            width: self.options.width,
+            height: self.options.height
+        };
+
         stretch.new_node(
             Style {
                 align_items: align_items.into(),
                 justify_content: justify_content.into(),
                 flex_direction: self.options.orientation.into(),
                 flex_grow: self.options.flex,
-                min_size: self.options.size,
-                max_size: self.options.size,
+                min_size: size,
+                max_size: size,
                 padding: self.options.padding,
                 margin: self.options.margin,
                 ..Default::default()
@@ -212,7 +221,7 @@ impl Widget for Container {
         ).unwrap()
     }
 
-    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node) {
+    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node, position: Point) {
         let layout = stretch.layout(*node).unwrap();
 
         self.set_size(Size {
@@ -221,26 +230,16 @@ impl Widget for Container {
         });
 
         self.set_position(lyon::math::point(
-            layout.location.x,
-            layout.location.y
+            layout.location.x + position.x,
+            layout.location.y + position.y
         ));
 
         for (index, child_node) in stretch.children(*node).unwrap().iter().enumerate() {
             // Get child at position index, this is the array of children of Window
             let mut child = self.children.get_mut(index).unwrap();
 
-            child.update_layout(&stretch, child_node);
-            child.update_coords(self.position);
+            child.update_layout(&stretch, child_node, self.position);
         }
-    }
-
-    fn update_coords(&mut self, position: Point) {
-        self.set_position(lyon::math::point(
-            self.position.x + position.x,
-            self.position.y + position.y
-        ));
-
-        //println!("Draw cont (container): ({} x {}) [{}, {}]", self.size.width, self.size.height, self.position.x, self.position.y);
     }
 
     fn set_size(&mut self, size: Size<f32>) {
@@ -252,9 +251,8 @@ impl Widget for Container {
     }
 
     fn debug(&self) {
-        println!("({} x {}) [{}, {}]", self.size.width, self.size.height, self.position.x, self.position.y);
+        println!("{} -> ({} x {}) [{}, {}]", self.options.id, self.size.width, self.size.height, self.position.x, self.position.y);
     }
-
 }
 
 pub struct Rect;
@@ -290,21 +288,23 @@ impl Label {
 
 impl Widget for Label {
     fn draw(&self, ctx: &mut Ctx, font_manager: &mut FontManager) {
-        ctx.begin_primitive();
-        ctx.color(Color::from_rgb(1.0, 0.0, 0.0));
-        ctx.round_rect(self.position, self.size.width, self.size.height, self.options.radius);
-        ctx.fill();
+        if self.options.debug {
+            ctx.begin_primitive();
+            ctx.color(Color::from_rgb(1.0, 0.0, 0.0));
+            ctx.round_rect(self.position, self.size.width, self.size.height, self.options.radius);
+            ctx.fill();
+        }
 
         ctx.begin_primitive();
         ctx.color(self.options.color);
-        ctx.font_size(24.0);
+        ctx.font_size(self.options.font_size);
         ctx.text(self.position, self.text.clone(), font_manager);
     }
 
     fn generate_stretch_node<'a>(&self, stretch: &mut Stretch, font_manager: &mut FontManager) -> stretch::node::Node {
-        let (bbox, _) = font_manager.calculate_text_bbox(24.0, "dejavu".to_string(), &self.text);
+        let (bbox, _) = font_manager.calculate_text_bbox(self.options.font_size, "dejavu".to_string(), &self.text);
 
-        println!("BBOX: ({} x {})", (bbox.y - bbox.w), (bbox.x - bbox.z));
+        //println!("BBOX: ({} x {})", (bbox.y - bbox.w), (bbox.x - bbox.z));
 
         stretch.new_leaf(
             Style {
@@ -321,7 +321,7 @@ impl Widget for Label {
         ).unwrap()
     }
 
-    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node) {
+    fn update_layout(&mut self, stretch: &Stretch, node: &stretch::node::Node, position: Point) {
         let layout = stretch.layout(*node).unwrap();
 
         self.set_size(Size {
@@ -330,19 +330,9 @@ impl Widget for Label {
         });
 
         self.set_position(lyon::math::point(
-            layout.location.x,
-            layout.location.y
+            layout.location.x + position.x,
+            layout.location.y + position.y
         ));
-
-    }
-
-    fn update_coords(&mut self, position: Point) {
-        self.set_position(lyon::math::point(
-            self.position.x + position.x,
-            self.position.y + position.y
-        ));
-
-        println!("Draw cont (label): ({} x {}) [{}, {}]", self.size.width, self.size.height, self.position.x, self.position.y);
     }
 
     fn set_size(&mut self, size: Size<f32>) {
@@ -354,6 +344,6 @@ impl Widget for Label {
     }
 
     fn debug(&self) {
-        println!("({} x {}) [{}, {}]", self.size.width, self.size.height, self.position.x, self.position.y);
+        println!("Label -> ({} x {}) [{}, {}]", self.size.width, self.size.height, self.position.x, self.position.y);
     }
 }

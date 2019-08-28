@@ -12,7 +12,7 @@ fn main() {
         &mut app,
         width,
         height,
-        "Come è bello, come da gioia"
+        "Come una cerva anela ai corsi delle acque"
     );
 
     app.add_window(window);

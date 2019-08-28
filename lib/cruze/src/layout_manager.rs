@@ -49,7 +49,7 @@ impl LayoutBuilder {
             // Get child at position index, this is the array of children of Window
             let mut child = children.get_mut(index).unwrap();
 
-            child.update_layout(&stretch, child_node);
+            child.update_layout(&stretch, child_node, lyon::math::point(0.0, 0.0));
 
             //println!("Index: {}\nSize: {:?}\nLocation: {:?}\n#############", index, child_node_layout.size, child_node_layout.location);
         }

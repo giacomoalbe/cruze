@@ -91,138 +91,119 @@ impl Window {
     pub fn generate_content(&mut self) {
         self.children.push(
             Rect::new(
-                WidgetOptions::default(),
+                WidgetOptions {
+                    id: "main_cont".to_string(),
+                    orientation: Orientation::Column,
+                    ..Default::default()
+                },
                 vec![
                     Rect::new(
                         WidgetOptions {
-                            padding: WidgetOptions::uniform_padding(10.0),
+                            id: "top_bar".to_string(),
+                            height: stretch::style::Dimension::Points(60.0),
+                            horizontal_align: Alignment::Center,
+                            vertical_align: Alignment::Center,
+                            color: Color::from_rgb(0.1, 0.1, 0.1),
+                            ..Default::default()
+                        },
+                        vec![
+                            Label::new(
+                                WidgetOptions {
+                                    font_size: 16.0,
+                                    ..Default::default()
+                                },
+                                "Top Bar".to_string()
+                            )
+                        ]
+                    ),
+                    Rect::new(
+                        WidgetOptions {
+                            id: "main_content".to_string(),
+                            flex: 1.0,
+                            color: Color::from_rgb(0.9, 0.9, 0.9),
                             ..Default::default()
                         },
                         vec![
                             Rect::new(
                                 WidgetOptions {
-                                    radius: 15.0,
-                                    orientation: Orientation::Column,
-                                    vertical_align: Alignment::SpaceAround,
+                                    padding: WidgetOptions::uniform_padding(5.0),
+                                    id: "left_side".to_string(),
+                                    color: Color::from_rgb(0.7, 0.7, 0.7),
+                                    width: stretch::style::Dimension::Points(250.0),
+                                    vertical_align: Alignment::Center,
                                     horizontal_align: Alignment::Center,
-                                    margin: WidgetOptions::uniform_padding(10.0),
-                                    color: Color::from_rgb(0.0, 0.0, 1.0),
                                     ..Default::default()
                                 },
                                 vec![
-                                    Rect::new(
+                                    Label::new(
                                         WidgetOptions {
-                                            radius: 40.0,
-                                            size: WidgetOptions::uniform_size(80.0),
+                                            font_size: 21.0,
+                                            ..Default::default()
+                                        },
+                                        "Left Side".to_string(),
+                                    ),
+                                ]
+                            ),
+                            Rect::new(
+                                WidgetOptions {
+                                    id: "canvas".to_string(),
+                                    flex: 1.0,
+                                    vertical_align: Alignment::Center,
+                                    horizontal_align: Alignment::Center,
+                                    ..Default::default()
+                                },
+                                vec![
+                                    Label::new(
+                                        WidgetOptions {
+                                            font_size: 21.0,
                                             color: Color::from_rgb(0.0, 0.0, 0.0),
                                             ..Default::default()
                                         },
-                                        vec![]
-                                    ),
-                                    Rect::new(
-                                        WidgetOptions {
-                                            radius: 40.0,
-                                            size: WidgetOptions::uniform_size(80.0),
-                                            color: Color::from_rgb(1.0, 0.0, 0.0),
-                                            ..Default::default()
-                                        },
-                                        vec![]
-                                    ),
-                                    Rect::new(
-                                        WidgetOptions {
-                                            radius: 40.0,
-                                            size: WidgetOptions::uniform_size(80.0),
-                                            color: Color::from_rgb(1.0, 1.0, 0.0),
-                                            ..Default::default()
-                                        },
-                                        vec![]
+                                        "Canvas".to_string(),
                                     )
                                 ]
                             ),
                             Rect::new(
                                 WidgetOptions {
-                                    flex: 1.0,
-                                    radius: 15.0,
+                                    padding: WidgetOptions::uniform_padding(5.0),
+                                    id: "right_side".to_string(),
+                                    color: Color::from_rgb(0.7, 0.7, 0.7),
+                                    width: stretch::style::Dimension::Points(250.0),
                                     vertical_align: Alignment::Center,
                                     horizontal_align: Alignment::Center,
-                                    padding: WidgetOptions::uniform_padding(15.0),
-                                    margin: WidgetOptions::uniform_padding(10.0),
-                                    color: Color::from_rgb(0.0, 1.0, 0.0),
                                     ..Default::default()
                                 },
                                 vec![
                                     Label::new(
                                         WidgetOptions {
-                                            color: Color::from_rgb(0.0, 0.0, 1.0),
+                                            font_size: 21.0,
+                                            vertical_align: Alignment::Center,
+                                            horizontal_align: Alignment::Center,
                                             ..Default::default()
                                         },
-                                        "Text2".to_string()
+                                        "Right Side".to_string(),
                                     )
                                 ]
                             ),
-                            Rect::new(
+                        ]
+                    ),
+                    Rect::new(
+                        WidgetOptions {
+                            id: "bottom_bar".to_string(),
+                            height: stretch::style::Dimension::Points(60.0),
+                            horizontal_align: Alignment::Center,
+                            vertical_align: Alignment::Center,
+                            color: Color::from_rgb(0.1, 0.1, 0.1),
+                            ..Default::default()
+                        },
+                        vec![
+                            Label::new(
                                 WidgetOptions {
-                                    flex: 1.0,
-                                    radius: 15.0,
-                                    vertical_align: Alignment::Center,
-                                    horizontal_align: Alignment::Center,
-                                    padding: WidgetOptions::uniform_padding(15.0),
-                                    margin: WidgetOptions::uniform_padding(10.0),
-                                    color: Color::from_rgb(0.0, 1.0, 0.0),
+                                    font_size: 16.0,
                                     ..Default::default()
                                 },
-                                vec![
-                                    Label::new(
-                                        WidgetOptions {
-                                            color: Color::from_rgb(0.0, 0.0, 1.0),
-                                            ..Default::default()
-                                        },
-                                        "Text3Longer".to_string()
-                                    )
-                                ]
-                            ),
-                            Rect::new(
-                                WidgetOptions {
-                                    radius: 15.0,
-                                    vertical_align: Alignment::Start,
-                                    horizontal_align: Alignment::End,
-                                    padding: WidgetOptions::uniform_padding(15.0),
-                                    margin: WidgetOptions::uniform_padding(10.0),
-                                    color: Color::from_rgb(0.0, 1.0, 0.0),
-                                    ..Default::default()
-                                },
-                                vec![
-                                    Label::new(
-                                        WidgetOptions {
-                                            color: Color::from_rgb(0.0, 0.0, 1.0),
-                                            ..Default::default()
-                                        },
-                                        "Text1".to_string()
-                                    )
-                                ]
-                            ),
-                            Rect::new(
-                                WidgetOptions {
-                                    radius: 15.0,
-                                    vertical_align: Alignment::Center,
-                                    horizontal_align: Alignment::Center,
-                                    margin: WidgetOptions::uniform_padding(10.0),
-                                    size: WidgetOptions::percent(10.0),
-                                    color: Color::from_rgb(0.5, 0.5, 0.5),
-                                    ..Default::default()
-                                },
-                                vec![
-                                    Rect::new(
-                                        WidgetOptions {
-                                            radius: 20.0,
-                                            size: WidgetOptions::uniform_size(40.0),
-                                            color: Color::from_rgb(1.0, 0.0, 0.0),
-                                            ..Default::default()
-                                        },
-                                        vec![]
-                                    )
-                                ]
-                            ),
+                                "Bottom Bar".to_string()
+                            )
                         ]
                     )
                 ]
