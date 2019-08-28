@@ -44,28 +44,6 @@ impl App {
 
             match event {
                 Event::LoopDestroyed => return,
-                Event::WindowEvent {
-                    event: WindowEvent::KeyboardInput {
-                        input: KeyboardInput {
-                            state: Pressed,
-                            virtual_keycode: Some(key),
-                            ..
-                        }, ..
-                    },
-                    window_id
-                } => {
-                    let window = windows
-                        .get_mut(&window_id);
-
-                    match window {
-                        Some(window) => {
-                            window.send_key(key);
-                        },
-                        None => {
-                            println!("Qualcosa è andato storto");
-                        }
-                    };
-                },
                 Event::WindowEvent { event, window_id } => {
                     let window = windows
                         .get_mut(&window_id);
@@ -78,6 +56,21 @@ impl App {
                                 },
                                 WindowEvent::RedrawRequested => {
                                     window.draw();
+                                },
+                                WindowEvent::KeyboardInput { input, .. } => {
+                                    match input.state {
+                                        Pressed => {
+                                            window.send_key(input.virtual_keycode.unwrap());
+                                        },
+                                        Released => {
+                                        }
+                                    }
+                                },
+                                WindowEvent::MouseInput { state, button, .. } => {
+                                    window.send_mouse_input(state, button);
+                                },
+                                WindowEvent::CursorMoved { position, .. } => {
+                                    window.set_cursor_position(position.x, position.y);
                                 },
                                 WindowEvent::CloseRequested => {
                                     *control_flow = ControlFlow::Exit

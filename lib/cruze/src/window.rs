@@ -18,7 +18,12 @@ use super::widgets::{
 };
 
 use glutin::window::{WindowBuilder, WindowId};
-use glutin::event::VirtualKeyCode;
+use glutin::event::{
+    VirtualKeyCode,
+    ElementState,
+    MouseButton
+};
+
 use glutin::{
     ContextBuilder,
     ContextWrapper,
@@ -29,6 +34,8 @@ pub struct Window {
     pub id: WindowId,
     pub context: ContextWrapper<PossiblyCurrent, glutin::window::Window>,
     pub children: Vec<Box<dyn Widget>>,
+    mouse_x: f64,
+    mouse_y: f64,
     size: glutin::dpi::LogicalSize,
     renderer: render_gl::Renderer,
     layout: layout_manager::LayoutBuilder,
@@ -81,6 +88,8 @@ impl Window {
             layout: layout,
             context: context,
             id: window_id,
+            mouse_x: 0.0,
+            mouse_y: 0.0,
         };
 
         window.generate_content();
@@ -252,6 +261,15 @@ impl Window {
         };
 
         self.draw();
+    }
+
+    pub fn send_mouse_input(&mut self, state: ElementState, button: MouseButton) {
+        println!("Button: {:?} has been {:?} at [{}, {}]", button, state, self.mouse_x, self.mouse_y);
+    }
+
+    pub fn set_cursor_position(&mut self,x: f64, y: f64) {
+        self.mouse_x = x;
+        self.mouse_y = y;
     }
 
     pub fn get_size(&self) -> glutin::dpi::LogicalSize {
